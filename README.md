@@ -1,6 +1,6 @@
 # PharmaCore Desktop
 
-Desktop-first Flutter app for offline pharmacy operations.
+Offline pharmacy warehouse management system built with Flutter desktop.
 
 ## Implemented Core Modules
 
