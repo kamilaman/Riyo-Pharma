@@ -1,0 +1,29 @@
+name: pharmacore
+description: Offline desktop pharmacy core management suite.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  provider: ^6.1.5
+  intl: ^0.20.2
+  path_provider: ^2.1.5
+  flutter_local_notifications: ^19.4.2
+  csv: ^6.0.0
+  pdf: ^3.11.3
+  printing: ^5.14.2
+  sqflite_common_ffi: ^2.3.6
+  path: ^1.9.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
