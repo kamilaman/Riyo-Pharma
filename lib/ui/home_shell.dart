@@ -18,6 +18,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AppState>().currentUser!;
+    final isMobile = MediaQuery.sizeOf(context).width < 900;
     final allPages = const [
       DashboardPage(),
       InventoryPage(),
@@ -102,35 +103,59 @@ class _HomeShellState extends State<HomeShell> {
         title: Text("PharmaCore"),
         centerTitle: false,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Chip(
-              label: Text("${user.username} • ${user.role.name}"),
-              avatar: const Icon(Icons.verified_user_outlined, size: 18),
+          if (!isMobile)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Chip(
+                label: Text("${user.username} • ${user.role.name}"),
+                avatar: const Icon(Icons.verified_user_outlined, size: 18),
+              ),
             ),
-          ),
           const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: () => context.read<AppState>().logout(),
-            icon: const Icon(Icons.logout),
-            label: const Text("Logout"),
-          ),
+          if (isMobile)
+            IconButton(
+              tooltip: "Logout",
+              onPressed: () => context.read<AppState>().logout(),
+              icon: const Icon(Icons.logout),
+            )
+          else
+            TextButton.icon(
+              onPressed: () => context.read<AppState>().logout(),
+              icon: const Icon(Icons.logout),
+              label: const Text("Logout"),
+            ),
           const SizedBox(width: 8),
         ],
       ),
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: index,
-            onDestinationSelected: (v) => setState(() => index = v),
-            labelType: NavigationRailLabelType.all,
-            groupAlignment: -0.85,
-            destinations: destinations,
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(child: pages[index]),
-        ],
-      ),
+      body: isMobile
+          ? pages[index]
+          : Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: index,
+                  onDestinationSelected: (v) => setState(() => index = v),
+                  labelType: NavigationRailLabelType.all,
+                  groupAlignment: -0.85,
+                  destinations: destinations,
+                ),
+                const VerticalDivider(width: 1),
+                Expanded(child: pages[index]),
+              ],
+            ),
+      bottomNavigationBar: isMobile
+          ? NavigationBar(
+              selectedIndex: index,
+              onDestinationSelected: (v) => setState(() => index = v),
+              destinations: destinations
+                  .map(
+                    (d) => NavigationDestination(
+                      icon: d.icon,
+                      label: (d.label as Text).data ?? "",
+                    ),
+                  )
+                  .toList(),
+            )
+          : null,
     );
   }
 }

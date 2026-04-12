@@ -14,11 +14,177 @@ import "../models.dart";
 import "../receipt_service.dart";
 import "ui_kit.dart";
 
+/// Barcode wedge capture + lookup for admin and pharmacist (dashboard entry).
+class _AdminQuickBarcodePanel extends StatefulWidget {
+  const _AdminQuickBarcodePanel();
+
+  @override
+  State<_AdminQuickBarcodePanel> createState() =>
+      _AdminQuickBarcodePanelState();
+}
+
+class _AdminQuickBarcodePanelState extends State<_AdminQuickBarcodePanel> {
+  final search = TextEditingController();
+  final keyboardFocus = FocusNode();
+  DateTime _lastKeyAt = DateTime.now();
+  String _barcodeBuffer = "";
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => keyboardFocus.requestFocus(),
+    );
+  }
+
+  @override
+  void dispose() {
+    search.dispose();
+    keyboardFocus.dispose();
+    super.dispose();
+  }
+
+  void _applyScanOrQuery(AppState s, String code) {
+    final trimmed = code.trim();
+    if (trimmed.length < 4) return;
+    final exact = s.findByBarcode(trimmed);
+    if (exact != null) {
+      search.clear();
+      setState(() {});
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Medicine match"),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  exact.name,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text("Generic: ${exact.genericName}"),
+                Text("Batch: ${exact.batchNo}"),
+                Text("Barcode: ${exact.barcode}"),
+                Text("Qty: ${exact.quantity}"),
+                Text(
+                  "Sell: Birr ${exact.sellingPrice.toStringAsFixed(2)}",
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Close"),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    search.text = trimmed;
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final matches = s.filterMedicines(query: search.text);
+    return KeyboardListener(
+      focusNode: keyboardFocus,
+      onKeyEvent: (event) {
+        if (event is! KeyDownEvent) return;
+        final now = DateTime.now();
+        if (now.difference(_lastKeyAt).inMilliseconds > 350) {
+          _barcodeBuffer = "";
+        }
+        _lastKeyAt = now;
+        if (event.logicalKey == LogicalKeyboardKey.enter) {
+          if (_barcodeBuffer.length >= 4) {
+            _applyScanOrQuery(context.read<AppState>(), _barcodeBuffer);
+          }
+          _barcodeBuffer = "";
+          return;
+        }
+        final label = event.character ?? "";
+        if (label.isNotEmpty && RegExp(r"[0-9A-Za-z-]").hasMatch(label)) {
+          _barcodeBuffer += label;
+        }
+      },
+      child: ContentCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Quick barcode lookup",
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "Scan here first or type — opens details when the code matches a product.",
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: search,
+              decoration: const InputDecoration(
+                labelText: "Barcode / search",
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (v) => _applyScanOrQuery(s, v),
+            ),
+            if (search.text.trim().isNotEmpty && matches.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                "Matches (${matches.length})",
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              ...matches.take(8).map(
+                    (m) => ListTile(
+                      dense: true,
+                      title: Text(m.name),
+                      subtitle: Text(
+                        "Barcode ${m.barcode} • Qty ${m.quantity}",
+                      ),
+                    ),
+                  ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
+    final user = s.currentUser;
+    final showQuickBarcode = user != null &&
+        (user.role == UserRole.admin || user.role == UserRole.pharmacist);
     final low = s.medicines.where((m) => m.isLowStock).toList()
       ..sort((a, b) => a.quantity.compareTo(b.quantity));
     final nearExpiry = s.medicines.where((m) => m.isNearExpiry).toList()
@@ -41,6 +207,10 @@ class DashboardPage extends StatelessWidget {
                   "Dashboard",
                   subtitle: "Overview of stock, alerts, and today's sales.",
                 ),
+                if (showQuickBarcode) ...[
+                  Ui.sectionGap,
+                  const _AdminQuickBarcodePanel(),
+                ],
                 Ui.sectionGap,
                 Wrap(
                   spacing: 12,
@@ -48,7 +218,7 @@ class DashboardPage extends StatelessWidget {
                   children: [
                     StatCard(
                       title: "Total Stock Value",
-                      value: "Rs ${s.totalStockValue.toStringAsFixed(2)}",
+                      value: "Birr ${s.totalStockValue.toStringAsFixed(2)}",
                       icon: Icons.account_balance_wallet_outlined,
                       tint: const Color(0xFF2563EB),
                     ),
@@ -68,7 +238,7 @@ class DashboardPage extends StatelessWidget {
                     ),
                     StatCard(
                       title: "Today's Sales",
-                      value: "Rs ${s.todaySales.toStringAsFixed(2)}",
+                      value: "Birr ${s.todaySales.toStringAsFixed(2)}",
                       icon: Icons.payments_outlined,
                       tint: const Color(0xFF10B981),
                     ),
@@ -166,7 +336,7 @@ class DashboardPage extends StatelessWidget {
                               DateFormat("yyyy-MM-dd HH:mm").format(sale.date),
                             ),
                             trailing: Text(
-                              "Rs ${sale.total.toStringAsFixed(2)}",
+                              "Birr ${sale.total.toStringAsFixed(2)}",
                             ),
                           );
                         },
@@ -353,12 +523,12 @@ class _InventoryPageState extends State<InventoryPage> {
                                         DataCell(Text("${m.quantity}")),
                                         DataCell(
                                           Text(
-                                            "Rs ${m.purchasePrice.toStringAsFixed(2)}",
+                                            "Birr ${m.purchasePrice.toStringAsFixed(2)}",
                                           ),
                                         ),
                                         DataCell(
                                           Text(
-                                            "Rs ${m.sellingPrice.toStringAsFixed(2)}",
+                                            "Birr ${m.sellingPrice.toStringAsFixed(2)}",
                                           ),
                                         ),
                                         DataCell(Text(m.supplier)),
@@ -425,85 +595,113 @@ class _InventoryPageState extends State<InventoryPage> {
         builder: (ctx, setDialog) => AlertDialog(
           title: Text(existing == null ? "Add Medicine" : "Edit Medicine"),
           content: SizedBox(
-            width: 560,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: n,
-                  decoration: const InputDecoration(labelText: "Name"),
-                ),
-                TextField(
-                  controller: g,
-                  decoration: const InputDecoration(labelText: "Generic"),
-                ),
-                TextField(
-                  controller: b,
-                  decoration: const InputDecoration(labelText: "Batch"),
-                ),
-                TextField(
-                  controller: q,
-                  decoration: const InputDecoration(labelText: "Qty"),
-                ),
-                TextField(
-                  controller: reorder,
-                  decoration: const InputDecoration(labelText: "Reorder Level"),
-                ),
-                TextField(
-                  controller: buy,
-                  decoration: const InputDecoration(
-                    labelText: "Purchase Price",
-                  ),
-                ),
-                TextField(
-                  controller: sell,
-                  decoration: const InputDecoration(labelText: "Selling Price"),
-                ),
-                TextField(
-                  controller: bar,
-                  decoration: const InputDecoration(labelText: "Barcode"),
-                ),
-                DropdownButton<String>(
-                  isExpanded: true,
-                  value: supplier,
-                  items: s.suppliers
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (v) => setDialog(() => supplier = v ?? supplier),
-                ),
-                DropdownButton<String>(
-                  isExpanded: true,
-                  value: category,
-                  items: s.categories
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (v) => setDialog(() => category = v ?? category),
-                ),
-                const SizedBox(height: 6),
-                Row(
+            width: MediaQuery.sizeOf(ctx).width * 0.92 > 560
+                ? 560
+                : MediaQuery.sizeOf(ctx).width * 0.92,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(ctx).height * 0.62,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Text(
-                        "Expiry: ${DateFormat("yyyy-MM-dd").format(exp)}",
+                    TextField(
+                      controller: n,
+                      decoration: const InputDecoration(labelText: "Name"),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: g,
+                      decoration: const InputDecoration(labelText: "Generic"),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: b,
+                      decoration: const InputDecoration(labelText: "Batch"),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: q,
+                      decoration: const InputDecoration(labelText: "Qty"),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: reorder,
+                      decoration: const InputDecoration(
+                        labelText: "Reorder Level",
                       ),
                     ),
-                    OutlinedButton(
-                      onPressed: () async {
-                        final d = await showDatePicker(
-                          context: ctx,
-                          initialDate: exp,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2100),
-                        );
-                        if (d != null) {
-                          setDialog(() => exp = d);
-                        }
-                      },
-                      child: const Text("Pick"),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: buy,
+                      decoration: const InputDecoration(
+                        labelText: "Purchase Price",
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: sell,
+                      decoration: const InputDecoration(
+                        labelText: "Selling Price",
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: bar,
+                      decoration: const InputDecoration(labelText: "Barcode"),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButton<String>(
+                      isExpanded: true,
+                      value: supplier,
+                      items: s.suppliers
+                          .map(
+                            (e) => DropdownMenuItem(value: e, child: Text(e)),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialog(() => supplier = v ?? supplier),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButton<String>(
+                      isExpanded: true,
+                      value: category,
+                      items: s.categories
+                          .map(
+                            (e) => DropdownMenuItem(value: e, child: Text(e)),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setDialog(() => category = v ?? category),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            "Expiry: ${DateFormat("yyyy-MM-dd").format(exp)}",
+                          ),
+                        ),
+                        OutlinedButton(
+                          onPressed: () async {
+                            final d = await showDatePicker(
+                              context: ctx,
+                              initialDate: exp,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2100),
+                            );
+                            if (d != null) {
+                              setDialog(() => exp = d);
+                            }
+                          },
+                          child: const Text("Pick"),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
           actions: [
@@ -554,6 +752,23 @@ class PosPage extends StatefulWidget {
 class _PosPageState extends State<PosPage> {
   final Map<String, int> cart = {};
   final search = TextEditingController();
+  final keyboardFocus = FocusNode();
+  DateTime _lastKeyAt = DateTime.now();
+  String _barcodeBuffer = "";
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => keyboardFocus.requestFocus(),
+    );
+  }
+
+  @override
+  void dispose() {
+    keyboardFocus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -565,82 +780,114 @@ class _PosPageState extends State<PosPage> {
           sum +
           s.medicines.firstWhere((m) => m.id == e.key).sellingPrice * e.value,
     );
-    return PageSurface(
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Ui.pageTitle(
-                        context,
-                        "Sales / POS",
-                        subtitle:
-                            "Fast billing with search and barcode-friendly workflow.",
+    return KeyboardListener(
+      focusNode: keyboardFocus,
+      onKeyEvent: (event) {
+        if (event is! KeyDownEvent) return;
+        final now = DateTime.now();
+        if (now.difference(_lastKeyAt).inMilliseconds > 350) {
+          _barcodeBuffer = "";
+        }
+        _lastKeyAt = now;
+        if (event.logicalKey == LogicalKeyboardKey.enter) {
+          if (_barcodeBuffer.length >= 4) {
+            final code = _barcodeBuffer;
+            final app = context.read<AppState>();
+            final exact = app.findByBarcode(code);
+            setState(() {
+              if (exact != null && exact.quantity > 0) {
+                cart[exact.id] = (cart[exact.id] ?? 0) + 1;
+                search.clear();
+              } else {
+                search.text = code;
+              }
+            });
+          }
+          _barcodeBuffer = "";
+          return;
+        }
+        final label = event.character ?? "";
+        if (label.isNotEmpty && RegExp(r"[0-9A-Za-z-]").hasMatch(label)) {
+          _barcodeBuffer += label;
+        }
+      },
+      child: PageSurface(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Ui.pageTitle(
+                          context,
+                          "Sales / POS",
+                          subtitle:
+                              "Scan adds a matched item to the cart; otherwise search filters the list.",
+                        ),
                       ),
-                    ),
-                    Ui.rowGap,
-                    OutlinedButton.icon(
-                      onPressed: cart.isEmpty
-                          ? null
-                          : () => setState(cart.clear),
-                      icon: const Icon(Icons.delete_sweep_outlined),
-                      label: const Text("Clear cart"),
-                    ),
-                  ],
-                ),
-                Ui.sectionGap,
-                TextField(
-                  controller: search,
-                  decoration: const InputDecoration(
-                    labelText: "Search medicine (name/generic/barcode)",
-                    prefixIcon: Icon(Icons.search),
+                      Ui.rowGap,
+                      OutlinedButton.icon(
+                        onPressed: cart.isEmpty
+                            ? null
+                            : () => setState(cart.clear),
+                        icon: const Icon(Icons.delete_sweep_outlined),
+                        label: const Text("Clear cart"),
+                      ),
+                    ],
                   ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                Ui.itemGap,
-                Expanded(
-                  child: ContentCard(
-                    padding: const EdgeInsets.all(0),
-                    child: list.isEmpty
-                        ? const EmptyState(
-                            icon: Icons.search_off_outlined,
-                            title: "No matches",
-                            message:
-                                "Try a different keyword or scan a barcode into the search box.",
-                          )
-                        : ListView.separated(
-                            itemCount: list.length,
-                            separatorBuilder: (context, index) =>
-                                const Divider(height: 1),
-                            itemBuilder: (_, i) {
-                              final m = list[i];
-                              return ListTile(
-                                title: Text(m.name),
-                                subtitle: Text(
-                                  "Stock ${m.quantity} • Rs ${m.sellingPrice.toStringAsFixed(2)}",
-                                ),
-                                trailing: FilledButton.tonalIcon(
-                                  onPressed: m.quantity <= 0
-                                      ? null
-                                      : () => setState(
-                                          () => cart[m.id] =
-                                              (cart[m.id] ?? 0) + 1,
-                                        ),
-                                  icon: const Icon(Icons.add),
-                                  label: const Text("Add"),
-                                ),
-                              );
-                            },
-                          ),
+                  Ui.sectionGap,
+                  TextField(
+                    controller: search,
+                    decoration: const InputDecoration(
+                      labelText:
+                          "Search medicine (name/generic/barcode); scanner ready",
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (_) => setState(() {}),
                   ),
-                ),
-              ],
+                  Ui.itemGap,
+                  Expanded(
+                    child: ContentCard(
+                      padding: const EdgeInsets.all(0),
+                      child: list.isEmpty
+                          ? const EmptyState(
+                              icon: Icons.search_off_outlined,
+                              title: "No matches",
+                              message:
+                                  "Try a different keyword or scan a barcode — exact codes add to the cart.",
+                            )
+                          : ListView.separated(
+                              itemCount: list.length,
+                              separatorBuilder: (context, index) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (_, i) {
+                                final m = list[i];
+                                return ListTile(
+                                  title: Text(m.name),
+                                  subtitle: Text(
+                                    "Stock ${m.quantity} • Birr ${m.sellingPrice.toStringAsFixed(2)}",
+                                  ),
+                                  trailing: FilledButton.tonalIcon(
+                                    onPressed: m.quantity <= 0
+                                        ? null
+                                        : () => setState(
+                                              () => cart[m.id] =
+                                                  (cart[m.id] ?? 0) + 1,
+                                            ),
+                                    icon: const Icon(Icons.add),
+                                    label: const Text("Add"),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
           const VerticalDivider(),
           SizedBox(
             width: 380,
@@ -671,7 +918,7 @@ class _PosPageState extends State<PosPage> {
                               return ListTile(
                                 title: Text(med.name),
                                 subtitle: Text(
-                                  "${e.value} × Rs ${med.sellingPrice.toStringAsFixed(2)}",
+                                  "${e.value} × Birr ${med.sellingPrice.toStringAsFixed(2)}",
                                 ),
                                 trailing: IconButton(
                                   tooltip: "Remove",
@@ -695,7 +942,7 @@ class _PosPageState extends State<PosPage> {
                       const Text("Total"),
                       const Spacer(),
                       Text(
-                        "Rs ${total.toStringAsFixed(2)}",
+                        "Birr ${total.toStringAsFixed(2)}",
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                     ],
@@ -738,6 +985,7 @@ class _PosPageState extends State<PosPage> {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -759,9 +1007,9 @@ class ReportsPage extends StatelessWidget {
         children: [
           Text("Stock summary: ${s.medicines.length}"),
           Text("Expiry report: ${s.nearExpiryCount}"),
-          Text("Sales report: Rs ${totalSales.toStringAsFixed(2)}"),
+          Text("Sales report: Birr ${totalSales.toStringAsFixed(2)}"),
           Text(
-            "Profit/Loss: Rs ${(totalSales - totalPurchase).toStringAsFixed(2)}",
+            "Profit/Loss: Birr ${(totalSales - totalPurchase).toStringAsFixed(2)}",
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -965,6 +1213,17 @@ class SettingsPage extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (state.currentUser?.role == UserRole.admin) ...[
+                  Ui.sectionGap,
+                  Text(
+                    "User Management",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const _UserManagementPanel(),
+                ],
               ],
             ),
           ),
@@ -1017,3 +1276,118 @@ class SettingsPage extends StatelessWidget {
     }
   }
 }
+
+class _UserManagementPanel extends StatelessWidget {
+  const _UserManagementPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FilledButton.icon(
+          onPressed: () => _openUserForm(context, null),
+          icon: const Icon(Icons.person_add_outlined),
+          label: const Text("Add User"),
+        ),
+        const SizedBox(height: 12),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: state.users.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, i) {
+            final u = state.users[i];
+            return ListTile(
+              title: Text(u.username),
+              subtitle: Text("Role: ${u.role.name} • PIN: ${u.pin}"),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    onPressed: () => _openUserForm(context, u),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                  IconButton(
+                    onPressed: state.currentUser?.id == u.id
+                        ? null
+                        : () => state.deleteUser(u.id),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openUserForm(BuildContext context, AppUser? existing) async {
+    final state = context.read<AppState>();
+    final userCtrl = TextEditingController(text: existing?.username ?? "");
+    final pinCtrl = TextEditingController(text: existing?.pin ?? "");
+    UserRole role = existing?.role ?? UserRole.cashier;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          title: Text(existing == null ? "Add User" : "Edit User"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: userCtrl,
+                decoration: const InputDecoration(labelText: "Username"),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: pinCtrl,
+                decoration: const InputDecoration(labelText: "PIN"),
+              ),
+              const SizedBox(height: 10),
+              DropdownButton<UserRole>(
+                isExpanded: true,
+                value: role,
+                items: UserRole.values
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r.name)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setDialog(() => role = v);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel"),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (userCtrl.text.trim().isEmpty || pinCtrl.text.trim().isEmpty) return;
+                final u = AppUser(
+                  id: existing?.id ?? "USR-${DateTime.now().microsecondsSinceEpoch}",
+                  username: userCtrl.text.trim(),
+                  pin: pinCtrl.text.trim(),
+                  role: role,
+                );
+                if (existing == null) {
+                  state.addUser(u);
+                } else {
+                  state.updateUser(u);
+                }
+                Navigator.pop(ctx);
+              },
+              child: const Text("Save"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

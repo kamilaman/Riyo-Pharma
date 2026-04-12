@@ -83,26 +83,14 @@ class AppState extends ChangeNotifier {
     companyName = data["companyName"] as String? ?? "Riyo Pharma";
     printerName = data["printerName"] as String? ?? "Default Printer";
     if (users.isEmpty) {
-      users.addAll([
+      users.add(
         AppUser(
           id: _id("USR"),
           username: "admin",
           pin: "1234",
           role: UserRole.admin,
         ),
-        AppUser(
-          id: _id("USR"),
-          username: "pharma",
-          pin: "1234",
-          role: UserRole.pharmacist,
-        ),
-        AppUser(
-          id: _id("USR"),
-          username: "cashier",
-          pin: "1234",
-          role: UserRole.cashier,
-        ),
-      ]);
+      );
       await _persist();
     }
     await runAlerts();
@@ -122,6 +110,25 @@ class AppState extends ChangeNotifier {
   void logout() {
     currentUser = null;
     notifyListeners();
+  }
+
+  void addUser(AppUser user) {
+    users.add(user);
+    _persistAndNotify();
+  }
+
+  void updateUser(AppUser user) {
+    final index = users.indexWhere((e) => e.id == user.id);
+    if (index != -1) {
+      users[index] = user;
+      _persistAndNotify();
+    }
+  }
+
+  void deleteUser(String id) {
+    if (currentUser?.id == id) return; // Prevent deleting self
+    users.removeWhere((e) => e.id == id);
+    _persistAndNotify();
   }
 
   String _id(String prefix) =>
@@ -266,6 +273,16 @@ class AppState extends ChangeNotifier {
     }).toList();
   }
 
+  /// Exact match on stored barcode (trimmed), for scanner / quick lookup.
+  Medicine? findByBarcode(String raw) {
+    final q = raw.trim();
+    if (q.isEmpty) return null;
+    for (final m in medicines) {
+      if (m.barcode.trim() == q) return m;
+    }
+    return null;
+  }
+
   Future<void> runAlerts() async {
     final lows = medicines.where((e) => e.isLowStock).length;
     final expiries = medicines.where((e) => e.isNearExpiry).length;
@@ -343,6 +360,28 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  void updateMasterValue(
+    List<String> collection,
+    String previousValue,
+    String nextValue,
+  ) {
+    final oldValue = previousValue.trim();
+    final newValue = nextValue.trim();
+    if (oldValue.isEmpty || newValue.isEmpty) return;
+    final index = collection.indexOf(oldValue);
+    if (index == -1) return;
+    if (collection.contains(newValue) && newValue != oldValue) return;
+    collection[index] = newValue;
+    _persistAndNotify();
+  }
+
+  void removeMasterValue(List<String> collection, String value) {
+    final v = value.trim();
+    if (v.isEmpty) return;
+    collection.remove(v);
+    _persistAndNotify();
+  }
+
   void updateCompanyName(String value) {
     companyName = value;
     _persistAndNotify();
@@ -389,25 +428,13 @@ class AppState extends ChangeNotifier {
         barcode: "8901234567890",
       ),
     );
-    users.addAll([
+    users.add(
       AppUser(
         id: _id("USR"),
         username: "admin",
         pin: "1234",
         role: UserRole.admin,
       ),
-      AppUser(
-        id: _id("USR"),
-        username: "pharma",
-        pin: "1234",
-        role: UserRole.pharmacist,
-      ),
-      AppUser(
-        id: _id("USR"),
-        username: "cashier",
-        pin: "1234",
-        role: UserRole.cashier,
-      ),
-    ]);
+    );
   }
 }

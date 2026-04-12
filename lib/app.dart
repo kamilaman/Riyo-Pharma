@@ -161,7 +161,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    "Default users: admin/pharma/cashier — PIN: 1234",
+                    "Default admin PIN: 1234",
                     style: TextStyle(color: Color(0xFF667085)),
                   ),
                 ],
