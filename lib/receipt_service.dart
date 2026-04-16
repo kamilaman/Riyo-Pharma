@@ -44,7 +44,7 @@ class ReceiptService {
             pw.Align(
               alignment: pw.Alignment.centerRight,
               child: pw.Text(
-                "Grand Total: Rs ${sale.total.toStringAsFixed(2)}",
+                "Grand Total: Birr ${sale.total.toStringAsFixed(2)}",
                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
               ),
             ),

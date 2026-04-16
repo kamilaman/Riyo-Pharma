@@ -4,11 +4,12 @@ import "package:provider/provider.dart";
 import "app.dart";
 import "app_state.dart";
 import "database_service.dart";
+import "network_service.dart";
 import "notification_service.dart";
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final state = AppState(DatabaseService(), NotificationService());
+  final state = AppState(DatabaseService(), NotificationService(), NetworkService());
   await state.init();
   runApp(
     ChangeNotifierProvider.value(value: state, child: const PharmaCoreApp()),

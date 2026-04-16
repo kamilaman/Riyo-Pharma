@@ -19,6 +19,7 @@ dependencies:
   printing: ^5.14.2
   sqflite_common_ffi: ^2.3.6
   path: ^1.9.1
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

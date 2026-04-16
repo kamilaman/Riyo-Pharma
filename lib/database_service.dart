@@ -13,6 +13,12 @@ class DatabaseService {
     databaseFactory = databaseFactoryFfi;
     final support = await getApplicationSupportDirectory();
     final dir = Directory(p.join(support.path, "pharmacore"));
+    // Recommendation:
+    // - SQLite/sqflite per device
+    // - One local server (Node.js + PostgreSQL)
+    // - Sync using operation queue
+    // - LAN-based communication
+    // - Optional cloud sync later
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -39,6 +45,9 @@ class DatabaseService {
           );
           await db.execute(
             "CREATE TABLE users (id TEXT PRIMARY KEY, payload TEXT NOT NULL)",
+          );
+          await db.execute(
+            "CREATE TABLE operation_queue (seq_id INTEGER PRIMARY KEY AUTOINCREMENT, operation TEXT NOT NULL, table_name TEXT NOT NULL, record_id TEXT NOT NULL, payload TEXT)",
           );
         },
       ),
@@ -90,6 +99,7 @@ class DatabaseService {
           .toList(),
       "companyName": settings["companyName"],
       "printerName": settings["printerName"],
+      "client_id": settings["client_id"],
     };
   }
 
@@ -161,4 +171,29 @@ class DatabaseService {
       }
     });
   }
+
+  Future<void> enqueueOperation(String operation, String tableName, String recordId, {Map<String, dynamic>? payload}) async {
+    final db = _db!;
+    await db.insert("operation_queue", {
+      "operation": operation,
+      "table_name": tableName,
+      "record_id": recordId,
+      "payload": payload != null ? jsonEncode(payload) : null,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingOperations() async {
+    return await _db!.query("operation_queue", orderBy: "seq_id ASC");
+  }
+
+  Future<void> removeOperations(List<int> seqIds) async {
+    if (seqIds.isEmpty) return;
+    final db = _db!;
+    await db.transaction((txn) async {
+      for (final id in seqIds) {
+        await txn.delete("operation_queue", where: "seq_id = ?", whereArgs: [id]);
+      }
+    });
+  }
 }
+

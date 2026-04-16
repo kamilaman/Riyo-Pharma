@@ -1,18 +1,21 @@
 import "dart:math";
 import "dart:convert";
 import "dart:io";
+import "dart:async";
 
 import "package:flutter/foundation.dart";
 
 import "database_service.dart";
 import "models.dart";
+import "network_service.dart";
 import "notification_service.dart";
 
 class AppState extends ChangeNotifier {
-  AppState(this._db, this._notifications);
+  AppState(this._db, this._notifications, this.network);
 
   final DatabaseService _db;
   final NotificationService _notifications;
+  final NetworkService network;
   final Random _rng = Random();
 
   final List<Medicine> medicines = [];
@@ -25,11 +28,23 @@ class AppState extends ChangeNotifier {
   AppUser? currentUser;
   String companyName = "Riyo Pharma";
   String printerName = "Default Printer";
+  Timer? _syncTimer;
 
   Future<void> init() async {
     await _db.init();
     await _notifications.init();
+    
+    // Check if we already have an app identity
     final data = await _db.loadSnapshot();
+    String? cid = data["client_id"] as String?;
+    if (cid == null) {
+        cid = _id("CLIENT");
+        _db.enqueueOperation("UPSERT", "settings", "client_id", payload: {"k": "client_id", "v": cid});
+    }
+    await network.init(cid);
+    
+    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) => _syncLocalQueue());
+    
     if (data.isEmpty) {
       _seed();
       await _persist();
@@ -114,6 +129,7 @@ class AppState extends ChangeNotifier {
 
   void addUser(AppUser user) {
     users.add(user);
+    _db.enqueueOperation("UPSERT", "users", user.id, payload: user.toJson());
     _persistAndNotify();
   }
 
@@ -121,6 +137,7 @@ class AppState extends ChangeNotifier {
     final index = users.indexWhere((e) => e.id == user.id);
     if (index != -1) {
       users[index] = user;
+      _db.enqueueOperation("UPSERT", "users", user.id, payload: user.toJson());
       _persistAndNotify();
     }
   }
@@ -128,6 +145,7 @@ class AppState extends ChangeNotifier {
   void deleteUser(String id) {
     if (currentUser?.id == id) return; // Prevent deleting self
     users.removeWhere((e) => e.id == id);
+    _db.enqueueOperation("DELETE", "users", id);
     _persistAndNotify();
   }
 
@@ -154,6 +172,7 @@ class AppState extends ChangeNotifier {
 
   void addMedicine(Medicine m) {
     medicines.add(m);
+    _db.enqueueOperation("UPSERT", "medicines", m.id, payload: m.toJson());
     _persistAndNotify();
   }
 
@@ -161,12 +180,14 @@ class AppState extends ChangeNotifier {
     final index = medicines.indexWhere((e) => e.id == m.id);
     if (index != -1) {
       medicines[index] = m;
+      _db.enqueueOperation("UPSERT", "medicines", m.id, payload: m.toJson());
       _persistAndNotify();
     }
   }
 
   void deleteMedicine(String id) {
     medicines.removeWhere((e) => e.id == id);
+    _db.enqueueOperation("DELETE", "medicines", id);
     _persistAndNotify();
   }
 
@@ -178,16 +199,18 @@ class AppState extends ChangeNotifier {
   }) {
     final med = medicines.firstWhere((e) => e.id == medicineId);
     med.quantity += qty;
-    purchases.add(
-      PurchaseRecord(
-        id: _id("PUR"),
-        supplier: supplier,
-        medicineId: medicineId,
-        qty: qty,
-        unitCost: unitCost,
-        date: DateTime.now(),
-      ),
+    final p = PurchaseRecord(
+      id: _id("PUR"),
+      supplier: supplier,
+      medicineId: medicineId,
+      qty: qty,
+      unitCost: unitCost,
+      date: DateTime.now(),
     );
+    purchases.add(p);
+    
+    _db.enqueueOperation("UPSERT", "purchases", p.id, payload: p.toJson());
+    _db.enqueueOperation("UPSERT", "medicines", med.id, payload: med.toJson());
     _persistAndNotify();
   }
 
@@ -202,22 +225,23 @@ class AppState extends ChangeNotifier {
     }
     med.quantity -= qty;
     if (reason == "sale") {
-      sales.add(
-        SaleRecord(
-          id: _id("SALE"),
-          customer: "Walk-in Customer",
-          date: DateTime.now(),
-          lines: [
-            SaleLine(
-              medicineId: med.id,
-              name: med.name,
-              qty: qty,
-              unitPrice: med.sellingPrice,
-            ),
-          ],
-        ),
+      final s = SaleRecord(
+        id: _id("SALE"),
+        customer: "Walk-in Customer",
+        date: DateTime.now(),
+        lines: [
+          SaleLine(
+            medicineId: med.id,
+            name: med.name,
+            qty: qty,
+            unitPrice: med.sellingPrice,
+          ),
+        ],
       );
+      sales.add(s);
+      _db.enqueueOperation("UPSERT", "sales", s.id, payload: s.toJson());
     }
+    _db.enqueueOperation("UPSERT", "medicines", med.id, payload: med.toJson());
     _persistAndNotify();
     return "OK";
   }
@@ -238,15 +262,16 @@ class AppState extends ChangeNotifier {
           unitPrice: med.sellingPrice,
         ),
       );
+      _db.enqueueOperation("UPSERT", "medicines", med.id, payload: med.toJson());
     }
-    sales.add(
-      SaleRecord(
-        id: _id("INV"),
-        customer: customer,
-        date: DateTime.now(),
-        lines: lines,
-      ),
+    final s = SaleRecord(
+      id: _id("INV"),
+      customer: customer,
+      date: DateTime.now(),
+      lines: lines,
     );
+    sales.add(s);
+    _db.enqueueOperation("UPSERT", "sales", s.id, payload: s.toJson());
     _persistAndNotify();
     return "OK";
   }
@@ -351,16 +376,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addMasterValue(List<String> collection, String value) {
+  void addMasterValue(String kind, List<String> collection, String value) {
     final v = value.trim();
     if (v.isEmpty) return;
     if (!collection.contains(v)) {
       collection.add(v);
+      _db.enqueueOperation("UPSERT", "masters", "$kind:$v", payload: {"kind": kind, "value": v});
       _persistAndNotify();
     }
   }
 
   void updateMasterValue(
+    String kind,
     List<String> collection,
     String previousValue,
     String nextValue,
@@ -372,23 +399,28 @@ class AppState extends ChangeNotifier {
     if (index == -1) return;
     if (collection.contains(newValue) && newValue != oldValue) return;
     collection[index] = newValue;
+    _db.enqueueOperation("DELETE", "masters", "$kind:$oldValue");
+    _db.enqueueOperation("UPSERT", "masters", "$kind:$newValue", payload: {"kind": kind, "value": newValue});
     _persistAndNotify();
   }
 
-  void removeMasterValue(List<String> collection, String value) {
+  void removeMasterValue(String kind, List<String> collection, String value) {
     final v = value.trim();
     if (v.isEmpty) return;
     collection.remove(v);
+    _db.enqueueOperation("DELETE", "masters", "$kind:$v");
     _persistAndNotify();
   }
 
   void updateCompanyName(String value) {
     companyName = value;
+    _db.enqueueOperation("UPSERT", "settings", "companyName", payload: {"k": "companyName", "v": value});
     _persistAndNotify();
   }
 
   void updatePrinterName(String value) {
     printerName = value;
+    _db.enqueueOperation("UPSERT", "settings", "printerName", payload: {"k": "printerName", "v": value});
     _persistAndNotify();
   }
 
@@ -436,5 +468,20 @@ class AppState extends ChangeNotifier {
         role: UserRole.admin,
       ),
     );
+  }
+
+  Future<void> _syncLocalQueue() async {
+    if (network.serverIp == null || network.token == null) return;
+    
+    try {
+      final ops = await _db.getPendingOperations();
+      if (ops.isNotEmpty) {
+        final success = await network.pushOperations(ops);
+        if (success) {
+          final seqIds = ops.map((e) => e["seq_id"] as int).toList();
+          await _db.removeOperations(seqIds);
+        }
+      }
+    } catch (_) {}
   }
 }

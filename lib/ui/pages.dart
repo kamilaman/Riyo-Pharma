@@ -1072,15 +1072,15 @@ class MastersPage extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: _SimpleMaster(title: "Suppliers", values: s.suppliers),
+            child: _SimpleMaster(title: "Suppliers", kind: "supplier", values: s.suppliers),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: _SimpleMaster(title: "Customers", values: s.customers),
+            child: _SimpleMaster(title: "Customers", kind: "customer", values: s.customers),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: _SimpleMaster(title: "Categories", values: s.categories),
+            child: _SimpleMaster(title: "Categories", kind: "category", values: s.categories),
           ),
         ],
       ),
@@ -1089,8 +1089,9 @@ class MastersPage extends StatelessWidget {
 }
 
 class _SimpleMaster extends StatefulWidget {
-  const _SimpleMaster({required this.title, required this.values});
+  const _SimpleMaster({required this.title, required this.kind, required this.values});
   final String title;
+  final String kind;
   final List<String> values;
   @override
   State<_SimpleMaster> createState() => _SimpleMasterState();
@@ -1114,6 +1115,7 @@ class _SimpleMasterState extends State<_SimpleMaster> {
             FilledButton(
               onPressed: () {
                 context.read<AppState>().addMasterValue(
+                  widget.kind,
                   widget.values,
                   ctrl.text,
                 );
@@ -1124,7 +1126,19 @@ class _SimpleMasterState extends State<_SimpleMaster> {
             Expanded(
               child: ListView(
                 children: widget.values
-                    .map((v) => ListTile(title: Text(v)))
+                    .map((v) => ListTile(
+                          title: Text(v),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () {
+                              context.read<AppState>().removeMasterValue(
+                                widget.kind,
+                                widget.values,
+                                v,
+                              );
+                            },
+                          ),
+                        ))
                     .toList(),
               ),
             ),
@@ -1214,6 +1228,15 @@ class SettingsPage extends StatelessWidget {
                   ],
                 ),
                 if (state.currentUser?.role == UserRole.admin) ...[
+                  Ui.sectionGap,
+                  Text(
+                    "LAN Server Initialization",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const _ServerSyncPanel(),
                   Ui.sectionGap,
                   Text(
                     "User Management",
@@ -1390,4 +1413,119 @@ class _UserManagementPanel extends StatelessWidget {
     );
   }
 }
+
+class _ServerSyncPanel extends StatefulWidget {
+  const _ServerSyncPanel();
+
+  @override
+  State<_ServerSyncPanel> createState() => _ServerSyncPanelState();
+}
+
+class _ServerSyncPanelState extends State<_ServerSyncPanel> {
+  final ipCtrl = TextEditingController();
+  final portCtrl = TextEditingController(text: "3000");
+  final userCtrl = TextEditingController();
+  final passCtrl = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final net = state.network;
+    
+    final isConnected = net.serverIp != null;
+    final isLoggedIn = net.token != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (isConnected) ...[
+          Text("Connected to: ${net.serverIp}:${net.serverPort}"),
+          Text("Status: ${isLoggedIn ? 'Authenticated' : 'Requires Login'}"),
+          const SizedBox(height: 12),
+        ],
+        if (!isLoggedIn) ...[
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: ipCtrl,
+                  decoration: const InputDecoration(labelText: "Server IP"),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 100,
+                child: TextField(
+                  controller: portCtrl,
+                  decoration: const InputDecoration(labelText: "Port"),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: () async {
+                  final ok = await net.connectManual(ipCtrl.text.trim(), int.tryParse(portCtrl.text.trim()) ?? 3000);
+                  if (ok && mounted) setState(() {});
+                },
+                child: const Text("Connect"),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final ip = await net.discoverServer();
+              if (ip != null && mounted) {
+                setState(() => ipCtrl.text = ip);
+              }
+            },
+            icon: const Icon(Icons.radar),
+            label: const Text("Auto-detect LAN Server"),
+          ),
+          const SizedBox(height: 12),
+          if (isConnected) ...[
+            const Divider(),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: userCtrl,
+                    decoration: const InputDecoration(labelText: "Sync User"),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: "Sync Password"),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () async {
+                    final ok = await net.login(userCtrl.text.trim(), passCtrl.text.trim());
+                    if (ok && mounted) setState(() {});
+                  },
+                  child: const Text("Login"),
+                ),
+              ],
+            ),
+          ],
+        ],
+        if (isLoggedIn) ...[
+          OutlinedButton.icon(
+            onPressed: () {
+              net.token = null; // Logout
+              setState(() {});
+            },
+            icon: const Icon(Icons.logout),
+            label: const Text("Disconnect Sync"),
+          ),
+        ]
+      ],
+    );
+  }
+}
+
 

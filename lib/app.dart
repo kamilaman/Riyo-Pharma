@@ -159,11 +159,11 @@ class _LoginPageState extends State<LoginPage> {
                       child: const Text("Login"),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    "Default admin PIN: 1234",
-                    style: TextStyle(color: Color(0xFF667085)),
-                  ),
+                  //const SizedBox(height: 10),
+                  //const Text(
+                  // "",
+                  // style: TextStyle(color: Color(0xFF667085)),
+                  //),*/
                 ],
               ),
             ),
