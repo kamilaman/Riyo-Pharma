@@ -9,8 +9,8 @@ class NotificationService {
     if (_ready) return;
     const settings = InitializationSettings(
       windows: WindowsInitializationSettings(
-        appName: "PharmaCore",
-        appUserModelId: "com.riyopharma.pharmacore",
+        appName: "RiyoPharma",
+        appUserModelId: "com.riyopharma.riyopharma",
         guid: "7f57d8ac-6d8f-4b10-9ec7-0f72d469ce88",
       ),
       macOS: DarwinInitializationSettings(),

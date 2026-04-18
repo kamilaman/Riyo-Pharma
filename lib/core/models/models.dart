@@ -96,12 +96,14 @@ class SaleRecord {
   SaleRecord({
     required this.id,
     required this.customer,
+    required this.cashier,
     required this.date,
     required this.lines,
   });
 
   final String id;
   final String customer;
+  final String cashier;
   final DateTime date;
   final List<SaleLine> lines;
 
@@ -110,6 +112,7 @@ class SaleRecord {
   Map<String, dynamic> toJson() => {
     "id": id,
     "customer": customer,
+    "cashier": cashier,
     "date": date.toIso8601String(),
     "lines": lines.map((e) => e.toJson()).toList(),
   };
@@ -117,6 +120,7 @@ class SaleRecord {
   factory SaleRecord.fromJson(Map<String, dynamic> json) => SaleRecord(
     id: json["id"] as String,
     customer: json["customer"] as String,
+    cashier: json["cashier"] as String? ?? "System",
     date: DateTime.parse(json["date"] as String),
     lines: (json["lines"] as List<dynamic>)
         .map((e) => SaleLine.fromJson(e as Map<String, dynamic>))

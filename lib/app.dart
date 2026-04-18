@@ -1,17 +1,22 @@
 import "package:flutter/material.dart";
 import "package:provider/provider.dart";
 
-import "app_state.dart";
-import "ui/home_shell.dart";
+import "core/state/app_state.dart";
+import "features/auth/views/login_page.dart";
+import "features/shell/views/home_shell_view.dart";
 
-class PharmaCoreApp extends StatelessWidget {
-  const PharmaCoreApp({super.key});
+class RiyoPharmaApp extends StatelessWidget {
+  const RiyoPharmaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final base = ColorScheme.fromSeed(seedColor: const Color(0xFF0EA5A6));
+    final base = ColorScheme.fromSeed(
+      seedColor: const Color.fromARGB(255, 2, 114, 174),
+      primary: const Color(0xFF003B5A),
+      secondary: const Color.fromARGB(191, 0, 109, 54),
+    );
     return MaterialApp(
-      title: "PharmaCore",
+      title: "RiyoPharma",
       theme: ThemeData(
         colorScheme: base,
         useMaterial3: true,
@@ -63,112 +68,9 @@ class PharmaCoreApp extends StatelessWidget {
           if (state.currentUser == null) {
             return const LoginPage();
           }
+
           return const HomeShell();
         },
-      ),
-    );
-  }
-}
-
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
-
-  @override
-  State<LoginPage> createState() => _LoginPageState();
-}
-
-class _LoginPageState extends State<LoginPage> {
-  final user = TextEditingController(text: "admin");
-  final pin = TextEditingController(text: "1234");
-  String? error;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: Center(
-        child: SizedBox(
-          width: 420,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(Icons.local_pharmacy, color: cs.primary),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "PharmaCore",
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 18,
-                              ),
-                            ),
-                            Text(
-                              "Sign in to continue",
-                              style: TextStyle(color: Color(0xFF667085)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: user,
-                    decoration: const InputDecoration(labelText: "Username"),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: pin,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: "PIN"),
-                  ),
-                  const SizedBox(height: 10),
-                  if (error != null) ...[
-                    Text(error!, style: TextStyle(color: cs.error)),
-                    const SizedBox(height: 8),
-                  ],
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () {
-                        final ok = context.read<AppState>().login(
-                          user.text,
-                          pin.text,
-                        );
-                        if (!ok) {
-                          setState(() => error = "Invalid credentials");
-                        }
-                      },
-                      child: const Text("Login"),
-                    ),
-                  ),
-                  //const SizedBox(height: 10),
-                  //const Text(
-                  // "",
-                  // style: TextStyle(color: Color(0xFF667085)),
-                  //),*/
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

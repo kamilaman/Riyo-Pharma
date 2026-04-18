@@ -6,7 +6,7 @@ import "package:path_provider/path_provider.dart";
 class StorageService {
   Future<File> _dataFile() async {
     final dir = await getApplicationSupportDirectory();
-    final appDir = Directory("${dir.path}/pharmacore");
+    final appDir = Directory("${dir.path}/riyopharma");
     if (!await appDir.exists()) {
       await appDir.create(recursive: true);
     }

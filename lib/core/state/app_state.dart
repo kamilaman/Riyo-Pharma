@@ -2,13 +2,15 @@ import "dart:math";
 import "dart:convert";
 import "dart:io";
 import "dart:async";
+import "package:path/path.dart" as p;
+import "package:path_provider/path_provider.dart";
 
 import "package:flutter/foundation.dart";
 
-import "database_service.dart";
-import "models.dart";
-import "network_service.dart";
-import "notification_service.dart";
+import "../models/models.dart";
+import "../services/database_service.dart";
+import "../services/network_service.dart";
+import "../services/notification_service.dart";
 
 class AppState extends ChangeNotifier {
   AppState(this._db, this._notifications, this.network);
@@ -30,21 +32,49 @@ class AppState extends ChangeNotifier {
   String printerName = "Default Printer";
   Timer? _syncTimer;
 
+  Future<void> _migrateFromOldDatabase() async {
+    try {
+      final support = await getApplicationSupportDirectory();
+      final oldDir = Directory(p.join(support.path, "pharmacore"));
+
+      // Delete old pharmacore database completely
+      if (await oldDir.exists()) {
+        await oldDir.delete(recursive: true);
+      }
+
+      // Ensure riyopharma directory exists (it will be created by database service)
+    } catch (e) {
+      debugPrint("Skipping old database migration: $e");
+    }
+  }
+
   Future<void> init() async {
     await _db.init();
     await _notifications.init();
-    
+
+    // Check if we need to migrate from old "pharmacore" directory
+    await _migrateFromOldDatabase();
+
     // Check if we already have an app identity
     final data = await _db.loadSnapshot();
+
     String? cid = data["client_id"] as String?;
     if (cid == null) {
-        cid = _id("CLIENT");
-        _db.enqueueOperation("UPSERT", "settings", "client_id", payload: {"k": "client_id", "v": cid});
+      cid = _id("CLIENT");
+      _db.enqueueOperation(
+        "UPSERT",
+        "settings",
+        "client_id",
+        payload: {"k": "client_id", "v": cid},
+      );
     }
     await network.init(cid);
-    
-    _syncTimer = Timer.periodic(const Duration(seconds: 15), (_) => _syncLocalQueue());
-    
+
+    _syncTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _syncLocalQueue(),
+    );
+
     if (data.isEmpty) {
       _seed();
       await _persist();
@@ -176,6 +206,114 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
   }
 
+  // CRUD operations for suppliers
+  void addSupplier(String supplier) {
+    if (!suppliers.contains(supplier)) {
+      suppliers.add(supplier);
+      _db.enqueueOperation(
+        "UPSERT",
+        "suppliers",
+        supplier,
+        payload: {'name': supplier},
+      );
+      _persistAndNotify();
+    }
+  }
+
+  void updateSupplier(String oldSupplier, String newSupplier) {
+    final index = suppliers.indexOf(oldSupplier);
+    if (index != -1) {
+      suppliers[index] = newSupplier;
+      _db.enqueueOperation(
+        "UPDATE",
+        "suppliers",
+        oldSupplier,
+        payload: {'name': newSupplier},
+      );
+      _persistAndNotify();
+    }
+  }
+
+  void deleteSupplier(String supplier) {
+    if (suppliers.contains(supplier) && supplier != "Default Supplier") {
+      suppliers.remove(supplier);
+      _db.enqueueOperation("DELETE", "suppliers", supplier);
+      _persistAndNotify();
+    }
+  }
+
+  // CRUD operations for customers
+  void addCustomer(String customer) {
+    if (!customers.contains(customer)) {
+      customers.add(customer);
+      _db.enqueueOperation(
+        "UPSERT",
+        "customers",
+        customer,
+        payload: {'name': customer},
+      );
+      _persistAndNotify();
+    }
+  }
+
+  void updateCustomer(String oldCustomer, String newCustomer) {
+    final index = customers.indexOf(oldCustomer);
+    if (index != -1) {
+      customers[index] = newCustomer;
+      _db.enqueueOperation(
+        "UPDATE",
+        "customers",
+        oldCustomer,
+        payload: {'name': newCustomer},
+      );
+      _persistAndNotify();
+    }
+  }
+
+  void deleteCustomer(String customer) {
+    if (customers.contains(customer) && customer != "Walk-in Customer") {
+      customers.remove(customer);
+      _db.enqueueOperation("DELETE", "customers", customer);
+      _persistAndNotify();
+    }
+  }
+
+  // CRUD operations for categories
+  void addCategory(String category) {
+    if (!categories.contains(category)) {
+      categories.add(category);
+      _db.enqueueOperation(
+        "UPSERT",
+        "categories",
+        category,
+        payload: {'name': category},
+      );
+      _persistAndNotify();
+    }
+  }
+
+  void updateCategory(String oldCategory, String newCategory) {
+    final index = categories.indexOf(oldCategory);
+    if (index != -1) {
+      categories[index] = newCategory;
+      _db.enqueueOperation(
+        "UPDATE",
+        "categories",
+        oldCategory,
+        payload: {'name': newCategory},
+      );
+      _persistAndNotify();
+    }
+  }
+
+  void deleteCategory(String category) {
+    if (categories.contains(category) && category != "General") {
+      categories.remove(category);
+      _db.enqueueOperation("DELETE", "categories", category);
+      _persistAndNotify();
+    }
+  }
+
   void updateMedicine(Medicine m) {
     final index = medicines.indexWhere((e) => e.id == m.id);
     if (index != -1) {
@@ -208,7 +346,7 @@ class AppState extends ChangeNotifier {
       date: DateTime.now(),
     );
     purchases.add(p);
-    
+
     _db.enqueueOperation("UPSERT", "purchases", p.id, payload: p.toJson());
     _db.enqueueOperation("UPSERT", "medicines", med.id, payload: med.toJson());
     _persistAndNotify();
@@ -228,6 +366,7 @@ class AppState extends ChangeNotifier {
       final s = SaleRecord(
         id: _id("SALE"),
         customer: "Walk-in Customer",
+        cashier: currentUser?.username ?? "System",
         date: DateTime.now(),
         lines: [
           SaleLine(
@@ -262,11 +401,17 @@ class AppState extends ChangeNotifier {
           unitPrice: med.sellingPrice,
         ),
       );
-      _db.enqueueOperation("UPSERT", "medicines", med.id, payload: med.toJson());
+      _db.enqueueOperation(
+        "UPSERT",
+        "medicines",
+        med.id,
+        payload: med.toJson(),
+      );
     }
     final s = SaleRecord(
       id: _id("INV"),
       customer: customer,
+      cashier: currentUser?.username ?? "System",
       date: DateTime.now(),
       lines: lines,
     );
@@ -381,7 +526,12 @@ class AppState extends ChangeNotifier {
     if (v.isEmpty) return;
     if (!collection.contains(v)) {
       collection.add(v);
-      _db.enqueueOperation("UPSERT", "masters", "$kind:$v", payload: {"kind": kind, "value": v});
+      _db.enqueueOperation(
+        "UPSERT",
+        "masters",
+        "$kind:$v",
+        payload: {"kind": kind, "value": v},
+      );
       _persistAndNotify();
     }
   }
@@ -400,7 +550,12 @@ class AppState extends ChangeNotifier {
     if (collection.contains(newValue) && newValue != oldValue) return;
     collection[index] = newValue;
     _db.enqueueOperation("DELETE", "masters", "$kind:$oldValue");
-    _db.enqueueOperation("UPSERT", "masters", "$kind:$newValue", payload: {"kind": kind, "value": newValue});
+    _db.enqueueOperation(
+      "UPSERT",
+      "masters",
+      "$kind:$newValue",
+      payload: {"kind": kind, "value": newValue},
+    );
     _persistAndNotify();
   }
 
@@ -414,13 +569,23 @@ class AppState extends ChangeNotifier {
 
   void updateCompanyName(String value) {
     companyName = value;
-    _db.enqueueOperation("UPSERT", "settings", "companyName", payload: {"k": "companyName", "v": value});
+    _db.enqueueOperation(
+      "UPSERT",
+      "settings",
+      "companyName",
+      payload: {"k": "companyName", "v": value},
+    );
     _persistAndNotify();
   }
 
   void updatePrinterName(String value) {
     printerName = value;
-    _db.enqueueOperation("UPSERT", "settings", "printerName", payload: {"k": "printerName", "v": value});
+    _db.enqueueOperation(
+      "UPSERT",
+      "settings",
+      "printerName",
+      payload: {"k": "printerName", "v": value},
+    );
     _persistAndNotify();
   }
 
@@ -472,7 +637,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _syncLocalQueue() async {
     if (network.serverIp == null || network.token == null) return;
-    
+
     try {
       final ops = await _db.getPendingOperations();
       if (ops.isNotEmpty) {
@@ -482,6 +647,14 @@ class AppState extends ChangeNotifier {
           await _db.removeOperations(seqIds);
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint("Local sync skipped: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
   }
 }

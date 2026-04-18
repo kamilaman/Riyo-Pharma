@@ -12,7 +12,7 @@ class DatabaseService {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     final support = await getApplicationSupportDirectory();
-    final dir = Directory(p.join(support.path, "pharmacore"));
+    final dir = Directory(p.join(support.path, "riyopharma"));
     // Recommendation:
     // - SQLite/sqflite per device
     // - One local server (Node.js + PostgreSQL)
@@ -22,7 +22,7 @@ class DatabaseService {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    final dbPath = p.join(dir.path, "pharmacore.db");
+    final dbPath = p.join(dir.path, "riyopharma.db");
     _db = await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
@@ -172,7 +172,12 @@ class DatabaseService {
     });
   }
 
-  Future<void> enqueueOperation(String operation, String tableName, String recordId, {Map<String, dynamic>? payload}) async {
+  Future<void> enqueueOperation(
+    String operation,
+    String tableName,
+    String recordId, {
+    Map<String, dynamic>? payload,
+  }) async {
     final db = _db!;
     await db.insert("operation_queue", {
       "operation": operation,
@@ -191,9 +196,12 @@ class DatabaseService {
     final db = _db!;
     await db.transaction((txn) async {
       for (final id in seqIds) {
-        await txn.delete("operation_queue", where: "seq_id = ?", whereArgs: [id]);
+        await txn.delete(
+          "operation_queue",
+          where: "seq_id = ?",
+          whereArgs: [id],
+        );
       }
     });
   }
 }
-

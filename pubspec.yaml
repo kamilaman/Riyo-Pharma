@@ -1,5 +1,5 @@
-name: pharmacore
-description: Offline desktop pharmacy core management suite.
+name: riyopharma
+description: Offline desktop pharmacy management suite.
 publish_to: "none"
 version: 1.0.0+1
 
@@ -28,3 +28,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/
