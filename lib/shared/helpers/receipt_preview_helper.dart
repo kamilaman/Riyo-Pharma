@@ -5,11 +5,16 @@ import "../../core/models/models.dart";
 import "../../core/services/receipt_service.dart";
 import "../../core/state/app_state.dart";
 
-Future<void> openSaleReceiptPreview(BuildContext context, SaleRecord sale) {
+Future<bool?> openSaleReceiptPreview(
+  BuildContext context,
+  SaleRecord sale, {
+  bool isDraft = false,
+}) {
   final state = context.read<AppState>();
   return ReceiptService().showReceiptPreview(
     context: context,
     companyName: state.companyName,
     sale: sale,
+    isDraft: isDraft,
   );
 }

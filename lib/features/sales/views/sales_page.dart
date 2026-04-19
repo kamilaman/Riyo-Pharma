@@ -21,14 +21,13 @@ class _PosPageState extends State<PosPage> {
 
   final Map<String, int> cart = {};
   final TextEditingController search = TextEditingController();
-  final TextEditingController customer = TextEditingController(
-    text: 'Walk-in Customer',
-  );
+  final TextEditingController customer = TextEditingController(text: 'Company');
   final FocusNode keyboardFocus = FocusNode();
 
   DateTime _lastKeyAt = DateTime.now();
   String _barcodeBuffer = '';
-  String _barcodeStatus = 'Scanner ready. Exact barcode scans add items directly.';
+  String _barcodeStatus =
+      'Scanner ready. Exact barcode scans add items directly.';
   String _selectedCategory = _allCategories;
 
   @override
@@ -71,11 +70,10 @@ class _PosPageState extends State<PosPage> {
       0,
       (sum, item) => sum + item.quantity,
     );
-    final vatAmount =
-        subtotal * (ReceiptService.defaultVatRate / 100);
+    final vatAmount = subtotal * (ReceiptService.defaultVatRate / 100);
     final grandTotal = subtotal + vatAmount;
     final activeCustomer = customer.text.trim().isEmpty
-        ? 'Walk-in Customer'
+        ? 'Company'
         : customer.text.trim();
 
     return KeyboardListener(
@@ -134,23 +132,20 @@ class _PosPageState extends State<PosPage> {
                             ),
                           ],
                         )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildControlPanel(context, state),
-                            const SizedBox(height: 16),
-                            Expanded(
-                              flex: 6,
-                              child: _buildCatalogPanel(
+                      : SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildControlPanel(context, state),
+                              const SizedBox(height: 16),
+                              _buildCatalogPanel(
                                 context,
                                 catalog: catalog,
                                 money: money,
+                                expandContent: false,
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            Expanded(
-                              flex: 5,
-                              child: _buildInvoicePanel(
+                              const SizedBox(height: 16),
+                              _buildInvoicePanel(
                                 context,
                                 state: state,
                                 cartItems: cartItems,
@@ -158,9 +153,10 @@ class _PosPageState extends State<PosPage> {
                                 subtotal: subtotal,
                                 vatAmount: vatAmount,
                                 grandTotal: grandTotal,
+                                expandContent: false,
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                 ),
               ],
@@ -218,18 +214,15 @@ class _PosPageState extends State<PosPage> {
     final items = <_CartItemViewData>[];
 
     for (final entry in cart.entries) {
-      final matches = state.medicines.where((medicine) => medicine.id == entry.key);
+      final matches = state.medicines.where(
+        (medicine) => medicine.id == entry.key,
+      );
       if (matches.isEmpty) {
         continue;
       }
 
       final medicine = matches.first;
-      items.add(
-        _CartItemViewData(
-          medicine: medicine,
-          quantity: entry.value,
-        ),
-      );
+      items.add(_CartItemViewData(medicine: medicine, quantity: entry.value));
     }
 
     return items;
@@ -251,11 +244,7 @@ class _PosPageState extends State<PosPage> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F2D3A),
-            Color(0xFF144E63),
-            Color(0xFF1A6A73),
-          ],
+          colors: [Color(0xFF0F2D3A), Color(0xFF144E63), Color(0xFF1A6A73)],
         ),
         boxShadow: const [
           BoxShadow(
@@ -461,15 +450,15 @@ class _PosPageState extends State<PosPage> {
     final tone = _barcodeStatus.contains('added')
         ? const Color(0xFFDCFCE7)
         : _barcodeStatus.contains('No exact') ||
-                _barcodeStatus.contains('fully allocated')
-            ? const Color(0xFFFFEDD5)
-            : const Color(0xFFE0F2FE);
+              _barcodeStatus.contains('fully allocated')
+        ? const Color(0xFFFFEDD5)
+        : const Color(0xFFE0F2FE);
     final toneText = _barcodeStatus.contains('added')
         ? const Color(0xFF166534)
         : _barcodeStatus.contains('No exact') ||
-                _barcodeStatus.contains('fully allocated')
-            ? const Color(0xFF9A3412)
-            : const Color(0xFF0F4C81);
+              _barcodeStatus.contains('fully allocated')
+        ? const Color(0xFF9A3412)
+        : const Color(0xFF0F4C81);
 
     return ContentCard(
       child: Column(
@@ -524,11 +513,11 @@ class _PosPageState extends State<PosPage> {
                       Expanded(
                         child: Text(
                           _barcodeStatus,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: toneText,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: toneText,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                       ),
                     ],
@@ -540,14 +529,8 @@ class _PosPageState extends State<PosPage> {
                 direction: stacked ? Axis.vertical : Axis.horizontal,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (stacked)
-                    copy
-                  else
-                    Expanded(child: copy),
-                  SizedBox(
-                    width: stacked ? 0 : 16,
-                    height: stacked ? 12 : 0,
-                  ),
+                  if (stacked) copy else Expanded(child: copy),
+                  SizedBox(width: stacked ? 0 : 16, height: stacked ? 12 : 0),
                   scannerPanel,
                 ],
               );
@@ -636,80 +619,95 @@ class _PosPageState extends State<PosPage> {
     BuildContext context, {
     required List<Medicine> catalog,
     required NumberFormat money,
+    bool expandContent = true,
   }) {
     return ContentCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Available Inventory',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${catalog.length} medicines ready for dispensing',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: catalog.isEmpty
-                ? const EmptyState(
-                    icon: Icons.inventory_2_outlined,
-                    title: 'No catalog matches',
-                    message:
-                        'Try a broader search term or clear the active category filter.',
-                  )
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = constraints.maxWidth;
-                      final columns = width >= 1280
-                          ? 3
-                          : width >= 760
-                              ? 2
-                              : 1;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool scrollable = !expandContent || constraints.maxHeight < 300;
 
-                      return GridView.builder(
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          mainAxisSpacing: 14,
-                          crossAxisSpacing: 14,
-                          childAspectRatio: columns == 1 ? 1.9 : 1.24,
+          final children = [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Available Inventory',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
-                        itemCount: catalog.length,
-                        itemBuilder: (context, index) {
-                          final medicine = catalog[index];
-                          final reserved = cart[medicine.id] ?? 0;
-                          final available = medicine.quantity - reserved;
-
-                          return _buildMedicineCard(
-                            context,
-                            medicine: medicine,
-                            available: available,
-                            reserved: reserved,
-                            money: money,
-                          );
-                        },
-                      );
-                    },
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${catalog.length} medicines ready for dispensing',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
-          ),
-        ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (!scrollable)
+              Expanded(
+                child: _buildCatalogContent(context, catalog, money, true),
+              )
+            else
+              _buildCatalogContent(context, catalog, money, false),
+          ];
+
+          final content = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          );
+
+          return scrollable ? SingleChildScrollView(child: content) : content;
+        },
       ),
+    );
+  }
+
+  Widget _buildCatalogContent(
+    BuildContext context,
+    List<Medicine> catalog,
+    NumberFormat money,
+    bool expandContent,
+  ) {
+    if (catalog.isEmpty) {
+      return const EmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'No catalog matches',
+        message:
+            'Try a broader search term or clear the active category filter.',
+      );
+    }
+    return GridView.builder(
+      shrinkWrap: !expandContent,
+      physics: expandContent ? null : const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 450,
+        mainAxisSpacing: 14,
+        crossAxisSpacing: 14,
+        mainAxisExtent: 400,
+      ),
+      itemCount: catalog.length,
+      itemBuilder: (context, index) {
+        final medicine = catalog[index];
+        final reserved = cart[medicine.id] ?? 0;
+        final available = medicine.quantity - reserved;
+
+        return _buildMedicineCard(
+          context,
+          medicine: medicine,
+          available: available,
+          reserved: reserved,
+          money: money,
+        );
+      },
     );
   }
 
@@ -731,8 +729,8 @@ class _PosPageState extends State<PosPage> {
           color: isOut
               ? const Color(0xFFFECACA)
               : isLow
-                  ? const Color(0xFFFCD34D)
-                  : const Color(0xFFD6DEE7),
+              ? const Color(0xFFFCD34D)
+              : const Color(0xFFD6DEE7),
         ),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -742,8 +740,8 @@ class _PosPageState extends State<PosPage> {
             isOut
                 ? const Color(0xFFFFF5F5)
                 : isLow
-                    ? const Color(0xFFFFFBEB)
-                    : const Color(0xFFF7FAFC),
+                ? const Color(0xFFFFFBEB)
+                : const Color(0xFFF7FAFC),
           ],
         ),
         boxShadow: const [
@@ -770,9 +768,8 @@ class _PosPageState extends State<PosPage> {
                         medicine.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -792,18 +789,18 @@ class _PosPageState extends State<PosPage> {
                   label: isOut
                       ? 'Out'
                       : isLow
-                          ? 'Low'
-                          : 'Ready',
+                      ? 'Low'
+                      : 'Ready',
                   background: isOut
                       ? const Color(0xFFFEE2E2)
                       : isLow
-                          ? const Color(0xFFFEF3C7)
-                          : const Color(0xFFDCFCE7),
+                      ? const Color(0xFFFEF3C7)
+                      : const Color(0xFFDCFCE7),
                   foreground: isOut
                       ? const Color(0xFFB91C1C)
                       : isLow
-                          ? const Color(0xFF92400E)
-                          : const Color(0xFF166534),
+                      ? const Color(0xFF92400E)
+                      : const Color(0xFF166534),
                 ),
               ],
             ),
@@ -901,9 +898,7 @@ class _PosPageState extends State<PosPage> {
           value,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: textTheme.bodyLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+          style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
         ),
       ],
     );
@@ -967,248 +962,283 @@ class _PosPageState extends State<PosPage> {
     required double subtotal,
     required double vatAmount,
     required double grandTotal,
+    bool expandContent = true,
   }) {
     final textTheme = Theme.of(context).textTheme;
 
     return ContentCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFFAFCFF),
-                  Color(0xFFF0F7FA),
-                ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final bool scrollable = !expandContent || constraints.maxHeight < 550;
+
+          final children = [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFFAFCFF), Color(0xFFF0F7FA)],
+                ),
+                border: Border.all(color: const Color(0xFFD6E4EA)),
               ),
-              border: Border.all(color: const Color(0xFFD6E4EA)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Invoice Workspace',
-                            style: textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Receipt file name follows the final sales invoice ID.',
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _buildStatusBadge(
-                      context,
-                      label: cartItems.isEmpty ? 'Draft' : 'Ready',
-                      background: cartItems.isEmpty
-                          ? const Color(0xFFE0F2FE)
-                          : const Color(0xFFDCFCE7),
-                      foreground: cartItems.isEmpty
-                          ? const Color(0xFF0F4C81)
-                          : const Color(0xFF166534),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: customer,
-                  decoration: const InputDecoration(
-                    labelText: 'Customer name',
-                    hintText: 'Walk-in Customer',
-                    prefixIcon: Icon(Icons.person_outline_rounded),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: state.customers.take(4).map((entry) {
-                    return ActionChip(
-                      label: Text(entry),
-                      onPressed: () => setState(() => customer.text = entry),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: const Color(0xFFF8FAFC),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              children: [
-                _buildSummaryLine(
-                  context,
-                  label: 'Subtotal',
-                  value: money.format(subtotal),
-                ),
-                const SizedBox(height: 10),
-                _buildSummaryLine(
-                  context,
-                  label: 'VAT (${ReceiptService.defaultVatRate.toStringAsFixed(0)}%)',
-                  value: money.format(vatAmount),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Divider(height: 1),
-                ),
-                _buildSummaryLine(
-                  context,
-                  label: 'Grand Total',
-                  value: money.format(grandTotal),
-                  emphasize: true,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Invoice Lines',
-            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: cartItems.isEmpty
-                ? const EmptyState(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'Invoice is empty',
-                    message:
-                        'Add medicines from the catalog to prepare a clean sales receipt.',
-                  )
-                : ListView.separated(
-                    itemCount: cartItems.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final item = cartItems[index];
-                      return Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item.medicine.name,
-                                        style: textTheme.titleMedium?.copyWith(
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${item.quantity} x ${money.format(item.medicine.sellingPrice)}',
-                                        style: textTheme.bodyMedium?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Text(
-                                  money.format(item.lineTotal),
-                                  style: textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              'Invoice Workspace',
+                              style: textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                OutlinedButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      final next = (cart[item.medicine.id] ?? 1) - 1;
-                                      if (next <= 0) {
-                                        cart.remove(item.medicine.id);
-                                      } else {
-                                        cart[item.medicine.id] = next;
-                                      }
-                                    });
-                                  },
-                                  icon: const Icon(Icons.remove_rounded),
-                                  label: const Text('Reduce'),
-                                ),
-                                const SizedBox(width: 10),
-                                FilledButton.tonalIcon(
-                                  onPressed: item.quantity >= item.medicine.quantity
-                                      ? null
-                                      : () {
-                                          setState(() {
-                                            cart[item.medicine.id] =
-                                                (cart[item.medicine.id] ?? 0) + 1;
-                                          });
-                                        },
-                                  icon: const Icon(Icons.add_rounded),
-                                  label: const Text('Add one'),
-                                ),
-                              ],
+                            const SizedBox(height: 4),
+                            Text(
+                              'Receipt file name follows the final sales invoice ID.',
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ],
                         ),
-                      );
-                    },
+                      ),
+                      _buildStatusBadge(
+                        context,
+                        label: cartItems.isEmpty ? 'Draft' : 'Ready',
+                        background: cartItems.isEmpty
+                            ? const Color(0xFFE0F2FE)
+                            : const Color(0xFFDCFCE7),
+                        foreground: cartItems.isEmpty
+                            ? const Color(0xFF0F4C81)
+                            : const Color(0xFF166534),
+                      ),
+                    ],
                   ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: cartItems.isEmpty
-                      ? null
-                      : () => setState(() => cart.clear()),
-                  icon: const Icon(Icons.delete_sweep_outlined),
-                  label: const Text('Clear invoice'),
-                ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: customer,
+                    decoration: const InputDecoration(
+                      labelText: 'Customer name',
+                      hintText: 'Company',
+                      prefixIcon: Icon(Icons.person_outline_rounded),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: state.customers.take(4).map((entry) {
+                      return ActionChip(
+                        label: Text(entry),
+                        onPressed: () => setState(() => customer.text = entry),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: const Color(0xFFF8FAFC),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                children: [
+                  _buildSummaryLine(
+                    context,
+                    label: 'Subtotal',
+                    value: money.format(subtotal),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildSummaryLine(
+                    context,
+                    label:
+                        'VAT (${ReceiptService.defaultVatRate.toStringAsFixed(0)}%)',
+                    value: money.format(vatAmount),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Divider(height: 1),
+                  ),
+                  _buildSummaryLine(
+                    context,
+                    label: 'Grand Total',
+                    value: money.format(grandTotal),
+                    emphasize: true,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Invoice Lines',
+              style: textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (!scrollable)
               Expanded(
-                child: FilledButton.icon(
-                  onPressed: cartItems.isEmpty
-                      ? null
-                      : () => _completeCheckout(context, state),
-                  icon: const Icon(Icons.receipt_long_rounded),
-                  label: const Text('Finalize and Preview'),
+                child: _buildInvoiceContent(
+                  context,
+                  cartItems,
+                  money,
+                  true,
+                  textTheme,
                 ),
+              )
+            else
+              _buildInvoiceContent(context, cartItems, money, false, textTheme),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: cartItems.isEmpty
+                        ? null
+                        : () => setState(() => cart.clear()),
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                    label: const Text('Clear invoice'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: cartItems.isEmpty
+                        ? null
+                        : () => _completeCheckout(context, state),
+                    icon: const Icon(Icons.receipt_long_rounded),
+                    label: const Text('Finalize and Preview'),
+                  ),
+                ),
+              ],
+            ),
+          ];
+
+          final content = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          );
+
+          return scrollable ? SingleChildScrollView(child: content) : content;
+        },
+      ),
+    );
+  }
+
+  Widget _buildInvoiceContent(
+    BuildContext context,
+    List<_CartItemViewData> cartItems,
+    NumberFormat money,
+    bool expandContent,
+    TextTheme textTheme,
+  ) {
+    if (cartItems.isEmpty) {
+      return const EmptyState(
+        icon: Icons.receipt_long_outlined,
+        title: 'Invoice is empty',
+        message:
+            'Add medicines from the catalog to prepare a clean sales receipt.',
+      );
+    }
+    return ListView.separated(
+      shrinkWrap: !expandContent,
+      physics: expandContent ? null : const NeverScrollableScrollPhysics(),
+      itemCount: cartItems.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final item = cartItems[index];
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.medicine.name,
+                          style: textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${item.quantity} x ${money.format(item.medicine.sellingPrice)}',
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    money.format(item.lineTotal),
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        final next = (cart[item.medicine.id] ?? 1) - 1;
+                        if (next <= 0) {
+                          cart.remove(item.medicine.id);
+                        } else {
+                          cart[item.medicine.id] = next;
+                        }
+                      });
+                    },
+                    icon: const Icon(Icons.remove_rounded),
+                    label: const Text('Reduce'),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.tonalIcon(
+                    onPressed: item.quantity >= item.medicine.quantity
+                        ? null
+                        : () {
+                            setState(() {
+                              cart[item.medicine.id] =
+                                  (cart[item.medicine.id] ?? 0) + 1;
+                            });
+                          },
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add one'),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1219,12 +1249,12 @@ class _PosPageState extends State<PosPage> {
     bool emphasize = false,
   }) {
     final style = emphasize
-        ? Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w900,
-            )
-        : Theme.of(context).textTheme.bodyLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            );
+        ? Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)
+        : Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700);
 
     return Row(
       children: [
@@ -1244,25 +1274,52 @@ class _PosPageState extends State<PosPage> {
 
   Future<void> _completeCheckout(BuildContext context, AppState state) async {
     final customerName = customer.text.trim().isEmpty
-        ? 'Walk-in Customer'
+        ? 'Company'
         : customer.text.trim();
+
+    final lines = cart.entries.map((entry) {
+      final medicine = state.medicines.firstWhere((m) => m.id == entry.key);
+      return SaleLine(
+        medicineId: medicine.id,
+        name: medicine.name,
+        qty: entry.value,
+        unitPrice: medicine.sellingPrice,
+      );
+    }).toList();
+
+    final nextInvoiceId = state.getNextInvoiceId();
+
+    final draftSale = SaleRecord(
+      id: nextInvoiceId,
+      date: DateTime.now(),
+      cashier: state.currentUser?.username ?? 'System',
+      customer: customerName,
+      lines: lines,
+    );
+
+    final confirmed = await openSaleReceiptPreview(
+      context,
+      draftSale,
+      isDraft: true,
+    );
+
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
 
     if (!state.customers.contains(customerName)) {
       state.addCustomer(customerName);
     }
 
-    final result = state.completeSale(customerName, cart);
-    if (!context.mounted) {
-      return;
-    }
+    final result = state.completeSale(
+      customerName,
+      cart,
+      invoiceId: nextInvoiceId,
+    );
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          result == 'OK'
-              ? 'Sale completed successfully.'
-              : result,
-        ),
+        content: Text(result == 'OK' ? 'Sale completed successfully.' : result),
       ),
     );
 
@@ -1271,22 +1328,25 @@ class _PosPageState extends State<PosPage> {
     }
 
     final sale = state.sales.last;
+
+    // Automatically print since they confirmed the draft preview
+    await ReceiptService().printReceipt(
+      companyName: state.companyName,
+      sale: sale,
+    );
+
+    if (!context.mounted) return;
+
     setState(() {
       cart.clear();
-      customer.text = 'Walk-in Customer';
-      _barcodeStatus =
-          'Sale ${sale.id} completed. Receipt preview is ready for review.';
+      customer.text = 'Company';
+      _barcodeStatus = 'Sale ${sale.id} completed. Receipt sent to printer.';
     });
-
-    await openSaleReceiptPreview(context, sale);
   }
 }
 
 class _CartItemViewData {
-  const _CartItemViewData({
-    required this.medicine,
-    required this.quantity,
-  });
+  const _CartItemViewData({required this.medicine, required this.quantity});
 
   final Medicine medicine;
   final int quantity;

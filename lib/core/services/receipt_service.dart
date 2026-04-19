@@ -11,21 +11,24 @@ import '../models/models.dart';
 class ReceiptService {
   static const double defaultVatRate = 15.0;
 
-  Future<void> showReceiptPreview({
+  Future<bool?> showReceiptPreview({
     required BuildContext context,
     required String companyName,
     required SaleRecord sale,
     String? cashier,
     double vatRate = defaultVatRate,
+    bool isDraft = false,
   }) {
-    return showDialog<void>(
+    return showDialog<bool>(
       context: context,
       barrierDismissible: true,
       barrierColor: const Color(0xB3172028),
       builder: (dialogContext) {
         final size = MediaQuery.of(dialogContext).size;
         final previewWidth = size.width > 1200 ? 1040.0 : size.width - 32;
-        final previewHeight = size.height > 860 ? size.height - 32 : size.height - 24;
+        final previewHeight = size.height > 860
+            ? size.height - 32
+            : size.height - 24;
 
         return Dialog(
           elevation: 0,
@@ -45,40 +48,75 @@ class ReceiptService {
               color: const Color(0xFFF1F3F6),
               borderRadius: BorderRadius.circular(24),
             ),
-            child: PdfPreview(
-              pdfFileName: fileNameForSale(companyName, sale),
-              canChangeOrientation: false,
-              canChangePageFormat: false,
-              canDebug: false,
-              allowPrinting: false,
-              allowSharing: false,
-              useActions: false,
-              maxPageWidth: 760,
-              padding: EdgeInsets.zero,
-              previewPageMargin: const EdgeInsets.symmetric(vertical: 28),
-              scrollViewDecoration: const BoxDecoration(
-                color: Color(0xFFE7EBF0),
-              ),
-              pdfPreviewPageDecoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border.fromBorderSide(
-                  BorderSide(color: Color(0xFFD8DEE6)),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x16000000),
-                    blurRadius: 20,
-                    offset: Offset(0, 10),
+            child: Column(
+              children: [
+                Expanded(
+                  child: PdfPreview(
+                    pdfFileName: fileNameForSale(companyName, sale),
+                    canChangeOrientation: false,
+                    canChangePageFormat: false,
+                    canDebug: false,
+                    allowPrinting: false,
+                    allowSharing: false,
+                    useActions: false,
+                    maxPageWidth: 760,
+                    padding: EdgeInsets.zero,
+                    previewPageMargin: const EdgeInsets.symmetric(vertical: 28),
+                    scrollViewDecoration: const BoxDecoration(
+                      color: Color(0xFFE7EBF0),
+                    ),
+                    pdfPreviewPageDecoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border.fromBorderSide(
+                        BorderSide(color: Color(0xFFD8DEE6)),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x16000000),
+                          blurRadius: 20,
+                          offset: Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    build: (format) => buildReceiptPdf(
+                      companyName: companyName,
+                      sale: sale,
+                      cashier: cashier,
+                      vatRate: vatRate,
+                      pageFormat: format,
+                    ),
                   ),
-                ],
-              ),
-              build: (format) => buildReceiptPdf(
-                companyName: companyName,
-                sale: sale,
-                cashier: cashier,
-                vatRate: vatRate,
-                pageFormat: format,
-              ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: Text(isDraft ? 'Cancel' : 'Close'),
+                    ),
+                    const SizedBox(width: 16),
+                    FilledButton.icon(
+                      onPressed: () {
+                        if (isDraft) {
+                          Navigator.pop(dialogContext, true);
+                        } else {
+                          printReceipt(
+                            companyName: companyName,
+                            sale: sale,
+                            cashier: cashier,
+                            vatRate: vatRate,
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.print_rounded),
+                      label: Text(
+                        isDraft ? 'Confirm & Print' : 'Print Receipt',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         );
@@ -120,10 +158,12 @@ class ReceiptService {
     final grandTotal = subtotal + vatAmount;
     final totalUnits = sale.lines.fold<int>(0, (sum, line) => sum + line.qty);
     final customerName = sale.customer.trim().isEmpty
-        ? 'Walk-in Customer'
+        ? 'Company'
         : sale.customer.trim();
     final cashierName = _resolveCashier(sale, cashier);
-    final company = companyName.trim().isEmpty ? 'Riyo Pharma' : companyName.trim();
+    final company = companyName.trim().isEmpty
+        ? 'Riyo Pharma'
+        : companyName.trim();
     final generatedAt = DateTime.now();
 
     final document = pw.Document(
@@ -144,7 +184,7 @@ class ReceiptService {
       pw.MultiPage(
         pageTheme: pw.PageTheme(
           pageFormat: pageFormat,
-          margin: const pw.EdgeInsets.fromLTRB(34, 32, 34, 30),
+          margin: const pw.EdgeInsets.fromLTRB(28, 24, 28, 24),
           theme: theme,
         ),
         header: (context) => _buildDocumentHeader(
@@ -270,11 +310,7 @@ class ReceiptService {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Container(
-                  width: 72,
-                  height: 5,
-                  color: PdfColors.teal700,
-                ),
+                pw.Container(width: 72, height: 5, color: PdfColors.teal700),
                 pw.SizedBox(height: 12),
                 pw.Text(
                   companyName,
@@ -628,7 +664,10 @@ class ReceiptService {
           pw.Divider(color: PdfColors.grey400),
           pw.Container(
             width: double.infinity,
-            padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const pw.EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
             decoration: pw.BoxDecoration(
               color: PdfColors.grey200,
               border: pw.Border.all(color: PdfColors.grey500, width: 0.8),

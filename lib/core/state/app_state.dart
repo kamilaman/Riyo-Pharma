@@ -24,7 +24,7 @@ class AppState extends ChangeNotifier {
   final List<PurchaseRecord> purchases = [];
   final List<SaleRecord> sales = [];
   final List<String> suppliers = ["Default Supplier"];
-  final List<String> customers = ["Walk-in Customer"];
+  final List<String> customers = ["Company"];
   final List<String> categories = ["General"];
   final List<AppUser> users = [];
   AppUser? currentUser;
@@ -110,8 +110,7 @@ class AppState extends ChangeNotifier {
     customers
       ..clear()
       ..addAll(
-        (data["customers"] as List<dynamic>? ?? ["Walk-in Customer"])
-            .cast<String>(),
+        (data["customers"] as List<dynamic>? ?? ["Company"]).cast<String>(),
       );
     categories
       ..clear()
@@ -271,7 +270,7 @@ class AppState extends ChangeNotifier {
   }
 
   void deleteCustomer(String customer) {
-    if (customers.contains(customer) && customer != "Walk-in Customer") {
+    if (customers.contains(customer) && customer != "Company") {
       customers.remove(customer);
       _db.enqueueOperation("DELETE", "customers", customer);
       _persistAndNotify();
@@ -352,6 +351,24 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
   }
 
+  String getNextInvoiceId() {
+    final year = DateTime.now().year;
+    var maxSeq = 0;
+    for (final s in sales) {
+      if (s.date.year == year && s.id.startsWith('RP/PE/')) {
+        final parts = s.id.split('/');
+        if (parts.length >= 3) {
+          final seq = int.tryParse(parts[2]);
+          if (seq != null && seq > maxSeq) {
+            maxSeq = seq;
+          }
+        }
+      }
+    }
+    final nextSeq = maxSeq + 1;
+    return 'RP/PE/${nextSeq.toString().padLeft(3, '0')}/$year';
+  }
+
   String stockOut({
     required String medicineId,
     required int qty,
@@ -364,8 +381,8 @@ class AppState extends ChangeNotifier {
     med.quantity -= qty;
     if (reason == "sale") {
       final s = SaleRecord(
-        id: _id("SALE"),
-        customer: "Walk-in Customer",
+        id: getNextInvoiceId(),
+        customer: "Company",
         cashier: currentUser?.username ?? "System",
         date: DateTime.now(),
         lines: [
@@ -385,7 +402,11 @@ class AppState extends ChangeNotifier {
     return "OK";
   }
 
-  String completeSale(String customer, Map<String, int> cart) {
+  String completeSale(
+    String customer,
+    Map<String, int> cart, {
+    String? invoiceId,
+  }) {
     final lines = <SaleLine>[];
     for (final entry in cart.entries) {
       final med = medicines.firstWhere((e) => e.id == entry.key);
@@ -409,7 +430,7 @@ class AppState extends ChangeNotifier {
       );
     }
     final s = SaleRecord(
-      id: _id("INV"),
+      id: invoiceId ?? getNextInvoiceId(),
       customer: customer,
       cashier: currentUser?.username ?? "System",
       date: DateTime.now(),
