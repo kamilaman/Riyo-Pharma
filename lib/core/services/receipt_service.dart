@@ -533,6 +533,7 @@ class ReceiptService {
     required SaleRecord sale,
     required NumberFormat money,
   }) {
+    final dateOnly = DateFormat('yyyy-MM-dd');
     final rows = sale.lines.asMap().entries.map((entry) {
       final index = entry.key;
       final line = entry.value;
@@ -543,7 +544,10 @@ class ReceiptService {
         children: [
           _tableCell('${index + 1}', alignment: pw.Alignment.center),
           _tableCell(line.name),
-          _tableCell(line.medicineId, textColor: PdfColors.blueGrey700),
+          _tableCell(line.batchNo.isEmpty ? '-' : line.batchNo),
+          _tableCell(dateOnly.format(line.manufacturedOn)),
+          _tableCell(dateOnly.format(line.expiry)),
+          _tableCell(line.unit.trim().isEmpty ? '-' : line.unit),
           _tableCell('${line.qty}', alignment: pw.Alignment.center),
           _tableCell(
             money.format(line.unitPrice),
@@ -574,11 +578,14 @@ class ReceiptService {
           border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.8),
           columnWidths: const {
             0: pw.FixedColumnWidth(28),
-            1: pw.FlexColumnWidth(2.7),
-            2: pw.FlexColumnWidth(1.5),
-            3: pw.FixedColumnWidth(44),
-            4: pw.FixedColumnWidth(82),
-            5: pw.FixedColumnWidth(88),
+            1: pw.FlexColumnWidth(2.6), // description
+            2: pw.FlexColumnWidth(1.2), // batch
+            3: pw.FlexColumnWidth(1.1), // mfg
+            4: pw.FlexColumnWidth(1.1), // exp
+            5: pw.FixedColumnWidth(42), // unit
+            6: pw.FixedColumnWidth(40), // qty
+            7: pw.FixedColumnWidth(74), // unit price
+            8: pw.FixedColumnWidth(78), // total
           },
           children: [
             pw.TableRow(
@@ -586,10 +593,13 @@ class ReceiptService {
               children: [
                 _headerCell('#', alignment: pw.Alignment.center),
                 _headerCell('Description'),
-                _headerCell('Code'),
+                _headerCell('Batch'),
+                _headerCell('Mfg', alignment: pw.Alignment.center),
+                _headerCell('Exp', alignment: pw.Alignment.center),
+                _headerCell('Unit', alignment: pw.Alignment.center),
                 _headerCell('Qty', alignment: pw.Alignment.center),
                 _headerCell('Unit Price', alignment: pw.Alignment.centerRight),
-                _headerCell('Amount', alignment: pw.Alignment.centerRight),
+                _headerCell('Total', alignment: pw.Alignment.centerRight),
               ],
             ),
             ...rows,

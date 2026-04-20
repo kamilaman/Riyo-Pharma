@@ -573,7 +573,7 @@ class _PosPageState extends State<PosPage> {
                   SizedBox(
                     width: filterWidth,
                     child: DropdownButtonFormField<String>(
-                      value: _selectedCategory,
+                      initialValue: _selectedCategory,
                       decoration: const InputDecoration(
                         labelText: 'Category',
                         prefixIcon: Icon(Icons.category_outlined),
@@ -1282,6 +1282,10 @@ class _PosPageState extends State<PosPage> {
       return SaleLine(
         medicineId: medicine.id,
         name: medicine.name,
+        batchNo: medicine.batchNo,
+        manufacturedOn: medicine.manufacturedOn,
+        expiry: medicine.expiry,
+        unit: medicine.unit,
         qty: entry.value,
         unitPrice: medicine.sellingPrice,
       );

@@ -4,7 +4,9 @@ class Medicine {
     required this.name,
     required this.genericName,
     required this.batchNo,
+    required this.manufacturedOn,
     required this.expiry,
+    required this.unit,
     required this.quantity,
     required this.purchasePrice,
     required this.sellingPrice,
@@ -18,7 +20,9 @@ class Medicine {
   String name;
   String genericName;
   String batchNo;
+  DateTime manufacturedOn;
   DateTime expiry;
+  String unit;
   int quantity;
   double purchasePrice;
   double sellingPrice;
@@ -36,7 +40,9 @@ class Medicine {
     "name": name,
     "genericName": genericName,
     "batchNo": batchNo,
+    "manufacturedOn": manufacturedOn.toIso8601String(),
     "expiry": expiry.toIso8601String(),
+    "unit": unit,
     "quantity": quantity,
     "purchasePrice": purchasePrice,
     "sellingPrice": sellingPrice,
@@ -51,7 +57,13 @@ class Medicine {
     name: json["name"] as String,
     genericName: json["genericName"] as String,
     batchNo: json["batchNo"] as String,
+    manufacturedOn: json["manufacturedOn"] == null
+        ? DateTime.now()
+        : DateTime.parse(json["manufacturedOn"] as String),
     expiry: DateTime.parse(json["expiry"] as String),
+    unit: (json["unit"] as String?)?.trim().isEmpty ?? true
+        ? "pcs"
+        : (json["unit"] as String),
     quantity: json["quantity"] as int,
     purchasePrice: (json["purchasePrice"] as num).toDouble(),
     sellingPrice: (json["sellingPrice"] as num).toDouble(),
@@ -66,12 +78,20 @@ class SaleLine {
   SaleLine({
     required this.medicineId,
     required this.name,
+    required this.batchNo,
+    required this.manufacturedOn,
+    required this.expiry,
+    required this.unit,
     required this.qty,
     required this.unitPrice,
   });
 
   final String medicineId;
   final String name;
+  final String batchNo;
+  final DateTime manufacturedOn;
+  final DateTime expiry;
+  final String unit;
   final int qty;
   final double unitPrice;
 
@@ -80,6 +100,10 @@ class SaleLine {
   Map<String, dynamic> toJson() => {
     "medicineId": medicineId,
     "name": name,
+    "batchNo": batchNo,
+    "manufacturedOn": manufacturedOn.toIso8601String(),
+    "expiry": expiry.toIso8601String(),
+    "unit": unit,
     "qty": qty,
     "unitPrice": unitPrice,
   };
@@ -87,6 +111,16 @@ class SaleLine {
   factory SaleLine.fromJson(Map<String, dynamic> json) => SaleLine(
     medicineId: json["medicineId"] as String,
     name: json["name"] as String,
+    batchNo: (json["batchNo"] as String?) ?? "",
+    manufacturedOn: json["manufacturedOn"] == null
+        ? DateTime.now()
+        : DateTime.parse(json["manufacturedOn"] as String),
+    expiry: json["expiry"] == null
+        ? DateTime.now()
+        : DateTime.parse(json["expiry"] as String),
+    unit: (json["unit"] as String?)?.trim().isEmpty ?? true
+        ? "pcs"
+        : (json["unit"] as String),
     qty: json["qty"] as int,
     unitPrice: (json["unitPrice"] as num).toDouble(),
   );
@@ -195,4 +229,58 @@ class AppUser {
       orElse: () => UserRole.cashier,
     ),
   );
+}
+
+enum StockOperationKind { grn, damage, adjustment }
+
+class StockOperationRecord {
+  StockOperationRecord({
+    required this.id,
+    required this.kind,
+    required this.medicineId,
+    required this.qtyDelta,
+    required this.date,
+    this.supplier,
+    this.unitCost,
+    this.note,
+  });
+
+  final String id;
+  final StockOperationKind kind;
+  final String medicineId;
+  final int qtyDelta;
+  final DateTime date;
+  final String? supplier;
+  final double? unitCost;
+  final String? note;
+
+  Map<String, dynamic> toJson() => {
+    "id": id,
+    "kind": kind.name,
+    "medicineId": medicineId,
+    "qtyDelta": qtyDelta,
+    "date": date.toIso8601String(),
+    "supplier": supplier,
+    "unitCost": unitCost,
+    "note": note,
+  };
+
+  factory StockOperationRecord.fromJson(Map<String, dynamic> json) {
+    final kindRaw = (json["kind"] as String?) ?? StockOperationKind.adjustment.name;
+    return StockOperationRecord(
+      id: json["id"] as String,
+      kind: StockOperationKind.values.firstWhere(
+        (e) => e.name == kindRaw,
+        orElse: () => StockOperationKind.adjustment,
+      ),
+      medicineId: json["medicineId"] as String,
+      qtyDelta: (json["qtyDelta"] as num?)?.toInt() ?? 0,
+      date: json["date"] == null
+          ? DateTime.now()
+          : DateTime.parse(json["date"] as String),
+      supplier: json["supplier"] as String?,
+      unitCost: (json["unitCost"] as num?)?.toDouble(),
+      note: json["note"] as String?,
+    );
+  }
 }

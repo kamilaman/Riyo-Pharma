@@ -23,6 +23,7 @@ class AppState extends ChangeNotifier {
   final List<Medicine> medicines = [];
   final List<PurchaseRecord> purchases = [];
   final List<SaleRecord> sales = [];
+  final List<StockOperationRecord> stockOperations = [];
   final List<String> suppliers = ["Default Supplier"];
   final List<String> customers = ["Company"];
   final List<String> categories = ["General"];
@@ -99,6 +100,13 @@ class AppState extends ChangeNotifier {
       ..addAll(
         (data["sales"] as List<dynamic>? ?? []).map(
           (e) => SaleRecord.fromJson(e as Map<String, dynamic>),
+        ),
+      );
+    stockOperations
+      ..clear()
+      ..addAll(
+        (data["stock_ops"] as List<dynamic>? ?? []).map(
+          (e) => StockOperationRecord.fromJson(e as Map<String, dynamic>),
         ),
       );
     suppliers
@@ -351,6 +359,34 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
   }
 
+  /// Stock in with explicit GRN log entry.
+  void recordGoodsReceiving({
+    required String medicineId,
+    required int qty,
+    required double unitCost,
+    required String supplier,
+    String? note,
+  }) {
+    stockIn(
+      medicineId: medicineId,
+      qty: qty,
+      unitCost: unitCost,
+      supplier: supplier,
+    );
+    final op = StockOperationRecord(
+      id: _id("STK"),
+      kind: StockOperationKind.grn,
+      medicineId: medicineId,
+      qtyDelta: qty,
+      date: DateTime.now(),
+      supplier: supplier,
+      unitCost: unitCost,
+      note: note,
+    );
+    stockOperations.add(op);
+    _persistAndNotify();
+  }
+
   String getNextInvoiceId() {
     final year = DateTime.now().year;
     var maxSeq = 0;
@@ -389,6 +425,10 @@ class AppState extends ChangeNotifier {
           SaleLine(
             medicineId: med.id,
             name: med.name,
+            batchNo: med.batchNo,
+            manufacturedOn: med.manufacturedOn,
+            expiry: med.expiry,
+            unit: med.unit,
             qty: qty,
             unitPrice: med.sellingPrice,
           ),
@@ -398,6 +438,67 @@ class AppState extends ChangeNotifier {
       _db.enqueueOperation("UPSERT", "sales", s.id, payload: s.toJson());
     }
     _db.enqueueOperation("UPSERT", "medicines", med.id, payload: med.toJson());
+    _persistAndNotify();
+    return "OK";
+  }
+
+  /// Stock out for damages/other reasons with a log entry.
+  String recordDamage({
+    required String medicineId,
+    required int qty,
+    required String reason,
+  }) {
+    final result = stockOut(medicineId: medicineId, qty: qty, reason: reason);
+    if (result != "OK") return result;
+    final op = StockOperationRecord(
+      id: _id("STK"),
+      kind: StockOperationKind.damage,
+      medicineId: medicineId,
+      qtyDelta: -qty,
+      date: DateTime.now(),
+      note: reason,
+    );
+    stockOperations.add(op);
+    _persistAndNotify();
+    return "OK";
+  }
+
+  /// Adjustment log entry. If [setTo] is provided it overrides [delta].
+  String recordAdjustment({
+    required String medicineId,
+    int? setTo,
+    int? delta,
+    String? note,
+  }) {
+    final med = medicines.firstWhere((e) => e.id == medicineId);
+    final appliedDelta = setTo != null ? (setTo - med.quantity) : (delta ?? 0);
+    if (appliedDelta == 0) return "OK";
+
+    if (appliedDelta > 0) {
+      stockIn(
+        medicineId: medicineId,
+        qty: appliedDelta,
+        unitCost: med.purchasePrice,
+        supplier: med.supplier,
+      );
+    } else {
+      final result = stockOut(
+        medicineId: medicineId,
+        qty: appliedDelta.abs(),
+        reason: note?.trim().isEmpty ?? true ? "adjustment" : note!.trim(),
+      );
+      if (result != "OK") return result;
+    }
+
+    final op = StockOperationRecord(
+      id: _id("STK"),
+      kind: StockOperationKind.adjustment,
+      medicineId: medicineId,
+      qtyDelta: appliedDelta,
+      date: DateTime.now(),
+      note: note,
+    );
+    stockOperations.add(op);
     _persistAndNotify();
     return "OK";
   }
@@ -418,6 +519,10 @@ class AppState extends ChangeNotifier {
         SaleLine(
           medicineId: med.id,
           name: med.name,
+          batchNo: med.batchNo,
+          manufacturedOn: med.manufacturedOn,
+          expiry: med.expiry,
+          unit: med.unit,
           qty: entry.value,
           unitPrice: med.sellingPrice,
         ),
@@ -614,6 +719,7 @@ class AppState extends ChangeNotifier {
     "medicines": medicines.map((e) => e.toJson()).toList(),
     "purchases": purchases.map((e) => e.toJson()).toList(),
     "sales": sales.map((e) => e.toJson()).toList(),
+    "stock_ops": stockOperations.map((e) => e.toJson()).toList(),
     "suppliers": suppliers,
     "customers": customers,
     "categories": categories,
@@ -637,7 +743,9 @@ class AppState extends ChangeNotifier {
         name: "Paracetamol 500mg",
         genericName: "Acetaminophen",
         batchNo: "PCT-1001",
+        manufacturedOn: DateTime.now().subtract(const Duration(days: 120)),
         expiry: DateTime.now().add(const Duration(days: 180)),
+        unit: "tabs",
         quantity: 120,
         purchasePrice: 1.2,
         sellingPrice: 2.0,

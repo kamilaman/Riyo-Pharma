@@ -26,7 +26,7 @@ class DatabaseService {
     _db = await databaseFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: (db, version) async {
           await db.execute(
             "CREATE TABLE medicines (id TEXT PRIMARY KEY, payload TEXT NOT NULL)",
@@ -36,6 +36,9 @@ class DatabaseService {
           );
           await db.execute(
             "CREATE TABLE sales (id TEXT PRIMARY KEY, payload TEXT NOT NULL)",
+          );
+          await db.execute(
+            "CREATE TABLE stock_ops (id TEXT PRIMARY KEY, payload TEXT NOT NULL)",
           );
           await db.execute(
             "CREATE TABLE settings (k TEXT PRIMARY KEY, v TEXT NOT NULL)",
@@ -50,6 +53,13 @@ class DatabaseService {
             "CREATE TABLE operation_queue (seq_id INTEGER PRIMARY KEY AUTOINCREMENT, operation TEXT NOT NULL, table_name TEXT NOT NULL, record_id TEXT NOT NULL, payload TEXT)",
           );
         },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute(
+              "CREATE TABLE stock_ops (id TEXT PRIMARY KEY, payload TEXT NOT NULL)",
+            );
+          }
+        },
       ),
     );
   }
@@ -59,6 +69,7 @@ class DatabaseService {
     final medicineRows = await db.query("medicines");
     final purchaseRows = await db.query("purchases");
     final saleRows = await db.query("sales");
+    final stockOpsRows = await db.query("stock_ops");
     final settingRows = await db.query("settings");
     final masterRows = await db.query("masters");
     final userRows = await db.query("users");
@@ -89,6 +100,11 @@ class DatabaseService {
             (e) => jsonDecode(e["payload"] as String) as Map<String, dynamic>,
           )
           .toList(),
+      "stock_ops": stockOpsRows
+          .map(
+            (e) => jsonDecode(e["payload"] as String) as Map<String, dynamic>,
+          )
+          .toList(),
       "suppliers": master("supplier"),
       "customers": master("customer"),
       "categories": master("category"),
@@ -109,6 +125,7 @@ class DatabaseService {
       await txn.delete("medicines");
       await txn.delete("purchases");
       await txn.delete("sales");
+      await txn.delete("stock_ops");
       await txn.delete("settings");
       await txn.delete("masters");
       await txn.delete("users");
@@ -130,6 +147,13 @@ class DatabaseService {
       for (final raw in (payload["sales"] as List<dynamic>)) {
         final item = raw as Map<String, dynamic>;
         await txn.insert("sales", {
+          "id": item["id"] as String,
+          "payload": jsonEncode(item),
+        });
+      }
+      for (final raw in (payload["stock_ops"] as List<dynamic>? ?? const [])) {
+        final item = raw as Map<String, dynamic>;
+        await txn.insert("stock_ops", {
           "id": item["id"] as String,
           "payload": jsonEncode(item),
         });
