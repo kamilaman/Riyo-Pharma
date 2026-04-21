@@ -2,6 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:intl/intl.dart";
 import "package:provider/provider.dart";
+import "dart:math" as math;
 
 import "../../../core/models/models.dart";
 import "../../../core/services/stock_print_service.dart";
@@ -26,6 +27,7 @@ class _InventoryPageState extends State<InventoryPage> {
   DateTime? _opsTo;
   Medicine? _productHistoryMedicine;
   int _inventoryRowsPerPage = 10;
+  int _inventoryPageIndex = 0;
 
   @override
   void initState() {
@@ -37,6 +39,7 @@ class _InventoryPageState extends State<InventoryPage> {
 
   @override
   void dispose() {
+    search.dispose();
     keyboardFocus.dispose();
     super.dispose();
   }
@@ -47,7 +50,6 @@ class _InventoryPageState extends State<InventoryPage> {
     final rows = state.filterMedicines(query: search.text);
     return DefaultTabController(
       length: 3,
-      initialIndex: _tabIndex.clamp(0, 2),
       child: KeyboardListener(
         focusNode: keyboardFocus,
         onKeyEvent: (event) => _handleScannerKey(event),
@@ -157,96 +159,44 @@ class _InventoryPageState extends State<InventoryPage> {
     AppState state,
     List<Medicine> rows,
   ) {
+    final safeRowsPerPage = _inventoryRowsPerPage.clamp(10, 100);
+    final totalPages =
+        rows.isEmpty ? 1 : ((rows.length - 1) ~/ safeRowsPerPage) + 1;
+    if (_inventoryPageIndex >= totalPages) {
+      _inventoryPageIndex = 0;
+    }
+    final start = _inventoryPageIndex * safeRowsPerPage;
+    final visible = rows.skip(start).take(safeRowsPerPage).toList();
+
     return Column(
       children: [
-        ContentCard(
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: search,
-                  decoration: const InputDecoration(
-                    labelText: "Search / Barcode (scanner supported)",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.search_rounded),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              const SizedBox(width: 10),
-              OutlinedButton.icon(
-                onPressed: () => setState(() => search.clear()),
-                icon: const Icon(Icons.close),
-                label: const Text("Clear"),
-              ),
-              const SizedBox(width: 10),
-              OutlinedButton.icon(
-                onPressed: () => _exportData(context),
-                icon: const Icon(Icons.upload_file_outlined),
-                label: const Text("Export data"),
-              ),
-              const SizedBox(width: 10),
-              FilledButton.tonalIcon(
-                onPressed: () => _importData(context),
-                icon: const Icon(Icons.download_outlined),
-                label: const Text("Import data"),
-              ),
-              const SizedBox(width: 10),
-              FilledButton.tonalIcon(
-                onPressed: () => _openForm(context, null),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text("New"),
-              ),
-            ],
-          ),
+        _InventoryToolbar(
+          searchController: search,
+          onSearchChanged: () => setState(() {}),
+          onClear: () => setState(() => search.clear()),
+          onExport: () => _exportData(context),
+          onImport: () => _importData(context),
+          onNewMedicine: () => _openForm(context, null),
         ),
         const SizedBox(height: 12),
         Expanded(
-          child: ContentCard(
-            padding: const EdgeInsets.all(0),
-            child: rows.isEmpty
-                ? const EmptyState(
-                    icon: Icons.inventory_2_outlined,
-                    title: "No medicines",
-                    message:
-                        "Add medicines or scan/search by barcode to get started.",
-                  )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: 1120),
-                      child: PaginatedDataTable(
-                        header: Text(
-                          "Medicines (${rows.length})",
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                        showCheckboxColumn: false,
-                        rowsPerPage: _inventoryRowsPerPage.clamp(10, 100),
-                        availableRowsPerPage: const [10, 20, 50, 100],
-                        onRowsPerPageChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _inventoryRowsPerPage = value);
-                        },
-                        columns: const [
-                          DataColumn(label: Text("#")),
-                          DataColumn(label: Text("Name")),
-                          DataColumn(label: Text("Generic")),
-                          DataColumn(label: Text("Batch")),
-                          DataColumn(label: Text("Mfg Date")),
-                          DataColumn(label: Text("Expiry")),
-                          DataColumn(label: Text("Unit")),
-                          DataColumn(label: Text("Qty")),
-                          DataColumn(label: Text("Buy")),
-                          DataColumn(label: Text("Sell")),
-                          DataColumn(label: Text("Supplier")),
-                          DataColumn(label: Text("Category")),
-                        ],
-                        source: _MedicineDataSource(rows),
-                      ),
-                    ),
-                  ),
+          child: _InventoryTableCard(
+            rows: rows,
+            visibleRows: visible,
+            startIndex: start,
+            rowsPerPage: safeRowsPerPage,
+            pageIndex: _inventoryPageIndex,
+            totalPages: totalPages,
+            onRowsPerPageChanged: (value) => setState(() {
+              _inventoryRowsPerPage = value;
+              _inventoryPageIndex = 0;
+            }),
+            onPreviousPage: _inventoryPageIndex <= 0
+                ? null
+                : () => setState(() => _inventoryPageIndex -= 1),
+            onNextPage: _inventoryPageIndex >= totalPages - 1
+                ? null
+                : () => setState(() => _inventoryPageIndex += 1),
           ),
         ),
       ],
@@ -1770,40 +1720,261 @@ class _ProductEvent {
   final String? subtitle;
 }
 
-class _MedicineDataSource extends DataTableSource {
-  _MedicineDataSource(this.rows);
+class _InventoryToolbar extends StatelessWidget {
+  const _InventoryToolbar({
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.onClear,
+    required this.onExport,
+    required this.onImport,
+    required this.onNewMedicine,
+  });
 
-  final List<Medicine> rows;
+  final TextEditingController searchController;
+  final VoidCallback onSearchChanged;
+  final VoidCallback onClear;
+  final VoidCallback onExport;
+  final VoidCallback onImport;
+  final VoidCallback onNewMedicine;
 
   @override
-  DataRow? getRow(int index) {
-    if (index < 0 || index >= rows.length) return null;
-    final m = rows[index];
-    return DataRow.byIndex(
-      index: index,
-      cells: [
-        DataCell(Text("${index + 1}")),
-        DataCell(Text(m.name)),
-        DataCell(Text(m.genericName)),
-        DataCell(Text(m.batchNo)),
-        DataCell(Text(DateFormat("yyyy-MM-dd").format(m.manufacturedOn))),
-        DataCell(Text(DateFormat("yyyy-MM-dd").format(m.expiry))),
-        DataCell(Text(m.unit)),
-        DataCell(Text("${m.quantity}")),
-        DataCell(Text("Birr ${m.purchasePrice.toStringAsFixed(2)}")),
-        DataCell(Text("Birr ${m.sellingPrice.toStringAsFixed(2)}")),
-        DataCell(Text(m.supplier)),
-        DataCell(Text(m.category)),
-      ],
+  Widget build(BuildContext context) {
+    return ContentCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: searchController,
+              decoration: const InputDecoration(
+                labelText: "Search / Barcode (scanner supported)",
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.search_rounded),
+              ),
+              onChanged: (_) => onSearchChanged(),
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton.icon(
+            onPressed: onClear,
+            icon: const Icon(Icons.close),
+            label: const Text("Clear"),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton.icon(
+            onPressed: onExport,
+            icon: const Icon(Icons.upload_file_outlined),
+            label: const Text("Export data"),
+          ),
+          const SizedBox(width: 10),
+          FilledButton.tonalIcon(
+            onPressed: onImport,
+            icon: const Icon(Icons.download_outlined),
+            label: const Text("Import data"),
+          ),
+          const SizedBox(width: 10),
+          FilledButton.tonalIcon(
+            onPressed: onNewMedicine,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text("New"),
+          ),
+        ],
+      ),
     );
   }
-
-  @override
-  bool get isRowCountApproximate => false;
-
-  @override
-  int get rowCount => rows.length;
-
-  @override
-  int get selectedRowCount => 0;
 }
+
+class _InventoryTableCard extends StatelessWidget {
+  const _InventoryTableCard({
+    required this.rows,
+    required this.visibleRows,
+    required this.startIndex,
+    required this.rowsPerPage,
+    required this.pageIndex,
+    required this.totalPages,
+    required this.onRowsPerPageChanged,
+    required this.onPreviousPage,
+    required this.onNextPage,
+  });
+
+  final List<Medicine> rows;
+  final List<Medicine> visibleRows;
+  final int startIndex;
+  final int rowsPerPage;
+  final int pageIndex;
+  final int totalPages;
+  final ValueChanged<int> onRowsPerPageChanged;
+  final VoidCallback? onPreviousPage;
+  final VoidCallback? onNextPage;
+
+  @override
+  Widget build(BuildContext context) {
+    return ContentCard(
+      padding: const EdgeInsets.all(0),
+      child: SizedBox.expand(
+        child: rows.isEmpty
+            ? const EmptyState(
+                icon: Icons.inventory_2_outlined,
+                title: "No medicines",
+                message: "Add medicines or scan/search by barcode to get started.",
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final minWidth = math.max(constraints.maxWidth, 1120.0);
+                  final textTheme = Theme.of(context).textTheme;
+                  final cs = Theme.of(context).colorScheme;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                "Medicines (${rows.length})",
+                                style: textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              "Rows",
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 110,
+                              child: DropdownButtonFormField<int>(
+                                initialValue: rowsPerPage,
+                                decoration: const InputDecoration(
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                items: const [10, 20, 50, 100]
+                                    .map(
+                                      (v) => DropdownMenuItem(
+                                        value: v,
+                                        child: Text("$v"),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value == null) return;
+                                  onRowsPerPageChanged(value);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: minWidth,
+                            child: SingleChildScrollView(
+                              child: DataTable(
+                                headingRowHeight: 48,
+                                columns: const [
+                                  DataColumn(label: Text("#")),
+                                  DataColumn(label: Text("Name")),
+                                  DataColumn(label: Text("Generic")),
+                                  DataColumn(label: Text("Batch")),
+                                  DataColumn(label: Text("Mfg Date")),
+                                  DataColumn(label: Text("Expiry")),
+                                  DataColumn(label: Text("Unit")),
+                                  DataColumn(label: Text("Qty")),
+                                  DataColumn(label: Text("Buy")),
+                                  DataColumn(label: Text("Sell")),
+                                  DataColumn(label: Text("Supplier")),
+                                  DataColumn(label: Text("Category")),
+                                ],
+                                rows: visibleRows.asMap().entries.map((entry) {
+                                  final rowIndex = entry.key;
+                                  final m = entry.value;
+                                  final serial = startIndex + rowIndex + 1;
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(Text("$serial")),
+                                      DataCell(Text(m.name)),
+                                      DataCell(Text(m.genericName)),
+                                      DataCell(Text(m.batchNo)),
+                                      DataCell(
+                                        Text(
+                                          DateFormat("yyyy-MM-dd")
+                                              .format(m.manufacturedOn),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          DateFormat("yyyy-MM-dd").format(m.expiry),
+                                        ),
+                                      ),
+                                      DataCell(Text(m.unit)),
+                                      DataCell(Text("${m.quantity}")),
+                                      DataCell(
+                                        Text(
+                                          "Birr ${m.purchasePrice.toStringAsFixed(2)}",
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          "Birr ${m.sellingPrice.toStringAsFixed(2)}",
+                                        ),
+                                      ),
+                                      DataCell(Text(m.supplier)),
+                                      DataCell(Text(m.category)),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                        child: Row(
+                          children: [
+                            Text(
+                              rows.isEmpty
+                                  ? "0"
+                                  : "${startIndex + 1}-${math.min(startIndex + rowsPerPage, rows.length)} of ${rows.length}",
+                              style: textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              tooltip: "Previous",
+                              onPressed: onPreviousPage,
+                              icon: const Icon(Icons.chevron_left_rounded),
+                            ),
+                            Text(
+                              "Page ${pageIndex + 1} / $totalPages",
+                              style: textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: "Next",
+                              onPressed: onNextPage,
+                              icon: const Icon(Icons.chevron_right_rounded),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
