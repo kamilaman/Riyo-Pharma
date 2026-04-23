@@ -116,6 +116,12 @@ class DatabaseService {
       "companyName": settings["companyName"],
       "printerName": settings["printerName"],
       "client_id": settings["client_id"],
+      "last_sync_seq_id": settings["last_sync_seq_id"],
+      "sync_server_host": settings["sync_server_host"],
+      "sync_server_port": settings["sync_server_port"],
+      "sync_server_scheme": settings["sync_server_scheme"],
+      "sync_server_user": settings["sync_server_user"],
+      "last_sync_at": settings["last_sync_at"],
     };
   }
 
@@ -186,6 +192,17 @@ class DatabaseService {
         "v": payload["printerName"] as String,
       });
 
+      final extraSettings =
+          (payload["settings"] as Map<String, dynamic>? ?? const {});
+      for (final entry in extraSettings.entries) {
+        final value = entry.value;
+        if (value == null) continue;
+        await txn.insert("settings", {
+          "k": entry.key,
+          "v": value.toString(),
+        });
+      }
+
       for (final raw in (payload["users"] as List<dynamic>)) {
         final item = raw as Map<String, dynamic>;
         await txn.insert("users", {
@@ -212,7 +229,14 @@ class DatabaseService {
   }
 
   Future<List<Map<String, dynamic>>> getPendingOperations() async {
-    return await _db!.query("operation_queue", orderBy: "seq_id ASC");
+    final rows = await _db!.query("operation_queue", orderBy: "seq_id ASC");
+    return rows.map((row) {
+      final payload = row["payload"] as String?;
+      return {
+        ...row,
+        "payload": payload == null ? null : jsonDecode(payload),
+      };
+    }).toList();
   }
 
   Future<void> removeOperations(List<int> seqIds) async {

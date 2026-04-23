@@ -51,7 +51,7 @@ class _InventoryPageState extends State<InventoryPage> {
     return DefaultTabController(
       length: 3,
       child: KeyboardListener(
-        focusNode: keyboardFocus,
+      focusNode: keyboardFocus,
         onKeyEvent: (event) => _handleScannerKey(event),
         child: Padding(
           padding: Ui.pagePadding,
@@ -134,24 +134,24 @@ class _InventoryPageState extends State<InventoryPage> {
     if (_tabIndex != 0) {
       return;
     }
-    if (event is! KeyDownEvent) return;
-    final now = DateTime.now();
-    if (now.difference(_lastKeyAt).inMilliseconds > 350) {
-      _barcodeBuffer = "";
-    }
-    _lastKeyAt = now;
-    if (event.logicalKey == LogicalKeyboardKey.enter) {
-      if (_barcodeBuffer.length >= 4) {
-        search.text = _barcodeBuffer;
-        setState(() {});
-      }
-      _barcodeBuffer = "";
-      return;
-    }
-    final label = event.character ?? "";
-    if (label.isNotEmpty && RegExp(r"[0-9A-Za-z-]").hasMatch(label)) {
-      _barcodeBuffer += label;
-    }
+        if (event is! KeyDownEvent) return;
+        final now = DateTime.now();
+        if (now.difference(_lastKeyAt).inMilliseconds > 350) {
+          _barcodeBuffer = "";
+        }
+        _lastKeyAt = now;
+        if (event.logicalKey == LogicalKeyboardKey.enter) {
+          if (_barcodeBuffer.length >= 4) {
+            search.text = _barcodeBuffer;
+            setState(() {});
+          }
+          _barcodeBuffer = "";
+          return;
+        }
+        final label = event.character ?? "";
+        if (label.isNotEmpty && RegExp(r"[0-9A-Za-z-]").hasMatch(label)) {
+          _barcodeBuffer += label;
+        }
   }
 
   Widget _buildInventoryTab(
@@ -277,9 +277,9 @@ class _InventoryPageState extends State<InventoryPage> {
   Widget _buildStockManagementTab(BuildContext context, AppState state) {
     final operations = _filteredStockOperations(state);
     return SingleChildScrollView(
-      child: Column(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          children: [
           ContentCard(
             child: Row(
               children: [
@@ -454,8 +454,8 @@ class _InventoryPageState extends State<InventoryPage> {
                                   .colorScheme
                                   .onSurfaceVariant,
                             ),
-                      ),
-                      const SizedBox(height: 12),
+            ),
+            const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.icon(
@@ -489,7 +489,7 @@ class _InventoryPageState extends State<InventoryPage> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Expanded(
+            Expanded(
                             child: Text(
                               "Damages",
                               style: Theme.of(context)
@@ -524,7 +524,7 @@ class _InventoryPageState extends State<InventoryPage> {
               ),
               SizedBox(
                 width: 420,
-                child: ContentCard(
+              child: ContentCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -834,28 +834,28 @@ class _InventoryPageState extends State<InventoryPage> {
                   )
                 else
                   SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
+                        scrollDirection: Axis.horizontal,
+                        child: ConstrainedBox(
                       constraints: const BoxConstraints(minWidth: 1080),
-                      child: DataTable(
+                            child: DataTable(
                         headingRowHeight: 48,
-                        columns: const [
+                              columns: const [
                           DataColumn(label: Text("Medicine")),
-                          DataColumn(label: Text("Batch")),
-                          DataColumn(label: Text("Qty")),
+                                DataColumn(label: Text("Batch")),
+                                DataColumn(label: Text("Qty")),
                           DataColumn(label: Text("Unit")),
-                          DataColumn(label: Text("Buy")),
+                                DataColumn(label: Text("Buy")),
                           DataColumn(label: Text("Value")),
-                          DataColumn(label: Text("Sell")),
+                                DataColumn(label: Text("Sell")),
                           DataColumn(label: Text("Potential")),
                         ],
                         rows: valuationRows.map((m) {
                           final value = m.purchasePrice * m.quantity;
                           final potential = m.sellingPrice * m.quantity;
                           return DataRow(
-                            cells: [
-                              DataCell(Text(m.name)),
-                              DataCell(Text(m.batchNo)),
+                                      cells: [
+                                        DataCell(Text(m.name)),
+                                        DataCell(Text(m.batchNo)),
                               DataCell(Text("${m.quantity}")),
                               DataCell(Text(m.unit)),
                               DataCell(Text(money.format(m.purchasePrice))),
@@ -910,7 +910,7 @@ class _InventoryPageState extends State<InventoryPage> {
                 ),
                 const SizedBox(height: 12),
                 if (selected == null)
-                  Text(
+                                          Text(
                     "No medicines available.",
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -961,7 +961,7 @@ class _InventoryPageState extends State<InventoryPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
+                                          Text(
                                   e.title,
                                   style: Theme.of(context)
                                       .textTheme
@@ -1081,7 +1081,7 @@ class _InventoryPageState extends State<InventoryPage> {
                 : MediaQuery.sizeOf(ctx).width * 0.92,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: [
+                                            children: [
                 DropdownButtonFormField<Medicine>(
                   initialValue: medicine,
                   decoration: const InputDecoration(
@@ -1139,10 +1139,10 @@ class _InventoryPageState extends State<InventoryPage> {
                   decoration: const InputDecoration(
                     labelText: "Unit cost",
                     border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
-            ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
           ),
           actions: [
             TextButton(
@@ -1214,9 +1214,9 @@ class _InventoryPageState extends State<InventoryPage> {
                         (m) => DropdownMenuItem(
                           value: m,
                           child: Text("${m.name} (${m.batchNo})"),
-                        ),
-                      )
-                      .toList(),
+                                    ),
+                                  )
+                                  .toList(),
                   onChanged: (value) {
                     if (value == null) return;
                     setDialog(() => medicine = value);

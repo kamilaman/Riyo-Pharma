@@ -260,6 +260,25 @@ class _ServerSyncPanelState extends State<_ServerSyncPanel> {
   final portCtrl = TextEditingController(text: "3000");
   final userCtrl = TextEditingController();
   final passCtrl = TextEditingController();
+  bool _useHttps = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final net = context.read<AppState>().network;
+    ipCtrl.text = net.serverIp ?? ipCtrl.text;
+    portCtrl.text = "${net.serverPort}";
+    _useHttps = net.useHttps;
+  }
+
+  @override
+  void dispose() {
+    ipCtrl.dispose();
+    portCtrl.dispose();
+    userCtrl.dispose();
+    passCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -271,9 +290,11 @@ class _ServerSyncPanelState extends State<_ServerSyncPanel> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (isConnected) ...[
-          Text("Connected to: ${net.serverIp}:${net.serverPort}"),
+        children: [
+          if (isConnected) ...[
+          Text(
+            "Connected to: ${net.scheme}://${net.serverIp}:${net.serverPort}",
+          ),
           Text("Status: ${isLoggedIn ? 'Authenticated' : 'Requires Login'}"),
           const SizedBox(height: 12),
         ],
@@ -283,7 +304,9 @@ class _ServerSyncPanelState extends State<_ServerSyncPanel> {
               Expanded(
                 child: TextField(
                   controller: ipCtrl,
-                  decoration: const InputDecoration(labelText: "Server IP"),
+                  decoration: const InputDecoration(
+                    labelText: "Server host or domain",
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -295,24 +318,62 @@ class _ServerSyncPanelState extends State<_ServerSyncPanel> {
                 ),
               ),
               const SizedBox(width: 8),
-              FilledButton(
-                onPressed: () async {
-                  final ok = await net.connectManual(
-                    ipCtrl.text.trim(),
-                    int.tryParse(portCtrl.text.trim()) ?? 3000,
-                  );
-                  if (ok && mounted) setState(() {});
-                },
-                child: const Text("Connect"),
-              ),
-            ],
+                FilledButton(
+                  onPressed: () async {
+                    final port =
+                        int.tryParse(portCtrl.text.trim()) ??
+                        (_useHttps ? 443 : 3000);
+                    net.configureEndpoint(
+                      ipCtrl.text.trim(),
+                      port,
+                      useHttps: _useHttps,
+                    );
+                    final ok = await net.connectManual(
+                      ipCtrl.text.trim(),
+                      port,
+                    );
+                    if (ok) {
+                      state.updateSyncEndpoint(
+                        host: ipCtrl.text.trim(),
+                        port: port,
+                        useHttps: _useHttps,
+                      );
+                    }
+                    if (ok && mounted) setState(() {});
+                  },
+                  child: const Text("Connect"),
+                ),
+              ],
+            ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _useHttps,
+            title: const Text("Use HTTPS for hosted server"),
+            subtitle: const Text(
+              "Enable this for domain-based internet hosting with SSL.",
+            ),
+            onChanged: (value) {
+              setState(() {
+                _useHttps = value;
+                if (value && portCtrl.text.trim() == "3000") {
+                  portCtrl.text = "443";
+                } else if (!value && portCtrl.text.trim() == "443") {
+                  portCtrl.text = "3000";
+                }
+              });
+            },
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () async {
               final ip = await net.discoverServer();
               if (ip != null && mounted) {
-                setState(() => ipCtrl.text = ip);
+                setState(() {
+                  ipCtrl.text = ip;
+                  portCtrl.text = "${net.serverPort}";
+                  _useHttps = false;
+                });
               }
             },
             icon: const Icon(Icons.radar),
@@ -336,7 +397,7 @@ class _ServerSyncPanelState extends State<_ServerSyncPanel> {
                     controller: passCtrl,
                     obscureText: true,
                     decoration: const InputDecoration(
-                      labelText: "Sync Password",
+                      labelText: "Sync password or PIN",
                     ),
                   ),
                 ),

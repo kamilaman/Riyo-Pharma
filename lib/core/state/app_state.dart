@@ -32,37 +32,61 @@ class AppState extends ChangeNotifier {
   String companyName = "Riyo Pharma";
   String printerName = "Default Printer";
   Timer? _syncTimer;
+  final Map<String, String> _settings = {};
 
   Future<void> _migrateFromOldDatabase() async {
     try {
       final support = await getApplicationSupportDirectory();
       final oldDir = Directory(p.join(support.path, "pharmacore"));
+      final newDir = Directory(p.join(support.path, "riyopharma"));
 
-      // Delete old pharmacore database completely
-      if (await oldDir.exists()) {
-        await oldDir.delete(recursive: true);
+      if (!await oldDir.exists() || await newDir.exists()) {
+        return;
       }
 
-      // Ensure riyopharma directory exists (it will be created by database service)
+      await newDir.create(recursive: true);
+      await for (final entity in oldDir.list(recursive: false)) {
+        final targetPath = p.join(newDir.path, p.basename(entity.path));
+        if (entity is File) {
+          await entity.copy(targetPath);
+        } else if (entity is Directory) {
+          await Directory(targetPath).create(recursive: true);
+        }
+      }
     } catch (e) {
       debugPrint("Skipping old database migration: $e");
     }
   }
 
   Future<void> init() async {
+    await _migrateFromOldDatabase();
     await _db.init();
     await _notifications.init();
 
-    // Check if we need to migrate from old "pharmacore" directory
-    await _migrateFromOldDatabase();
-
-    // Check if we already have an app identity
     final data = await _db.loadSnapshot();
+    _settings
+      ..clear()
+      ..addAll({
+        for (final entry in data.entries)
+          if (entry.value != null &&
+              entry.key != "medicines" &&
+              entry.key != "purchases" &&
+              entry.key != "sales" &&
+              entry.key != "stock_ops" &&
+              entry.key != "suppliers" &&
+              entry.key != "customers" &&
+              entry.key != "categories" &&
+              entry.key != "users" &&
+              entry.key != "companyName" &&
+              entry.key != "printerName")
+            entry.key: entry.value.toString(),
+      });
 
-    String? cid = data["client_id"] as String?;
+    String? cid = _settings["client_id"];
     if (cid == null) {
       cid = _id("CLIENT");
-      _db.enqueueOperation(
+      _settings["client_id"] = cid;
+      await _db.enqueueOperation(
         "UPSERT",
         "settings",
         "client_id",
@@ -70,6 +94,16 @@ class AppState extends ChangeNotifier {
       );
     }
     await network.init(cid);
+    final syncHost = _settings["sync_server_host"];
+    final syncPort = int.tryParse(_settings["sync_server_port"] ?? "");
+    final syncScheme = _settings["sync_server_scheme"] ?? "http";
+    if (syncHost != null && syncHost.trim().isNotEmpty) {
+      network.configureEndpoint(
+        syncHost,
+        syncPort ?? (syncScheme == "https" ? 443 : 3000),
+        useHttps: syncScheme == "https",
+      );
+    }
 
     _syncTimer = Timer.periodic(
       const Duration(seconds: 15),
@@ -384,6 +418,7 @@ class AppState extends ChangeNotifier {
       note: note,
     );
     stockOperations.add(op);
+    _db.enqueueOperation("UPSERT", "stock_ops", op.id, payload: op.toJson());
     _persistAndNotify();
   }
 
@@ -459,6 +494,7 @@ class AppState extends ChangeNotifier {
       note: reason,
     );
     stockOperations.add(op);
+    _db.enqueueOperation("UPSERT", "stock_ops", op.id, payload: op.toJson());
     _persistAndNotify();
     return "OK";
   }
@@ -499,6 +535,7 @@ class AppState extends ChangeNotifier {
       note: note,
     );
     stockOperations.add(op);
+    _db.enqueueOperation("UPSERT", "stock_ops", op.id, payload: op.toJson());
     _persistAndNotify();
     return "OK";
   }
@@ -625,6 +662,13 @@ class AppState extends ChangeNotifier {
           (e) => SaleRecord.fromJson(e as Map<String, dynamic>),
         ),
       );
+    stockOperations
+      ..clear()
+      ..addAll(
+        (data["stock_ops"] as List<dynamic>? ?? const []).map(
+          (e) => StockOperationRecord.fromJson(e as Map<String, dynamic>),
+        ),
+      );
     suppliers
       ..clear()
       ..addAll((data["suppliers"] as List<dynamic>).cast<String>());
@@ -715,6 +759,38 @@ class AppState extends ChangeNotifier {
     _persistAndNotify();
   }
 
+  void updateSyncEndpoint({
+    required String host,
+    required int port,
+    required bool useHttps,
+  }) {
+    final trimmedHost = host.trim();
+    if (trimmedHost.isEmpty) return;
+    network.configureEndpoint(trimmedHost, port, useHttps: useHttps);
+    _settings["sync_server_host"] = trimmedHost;
+    _settings["sync_server_port"] = port.toString();
+    _settings["sync_server_scheme"] = useHttps ? "https" : "http";
+    _db.enqueueOperation(
+      "UPSERT",
+      "settings",
+      "sync_server_host",
+      payload: {"k": "sync_server_host", "v": trimmedHost},
+    );
+    _db.enqueueOperation(
+      "UPSERT",
+      "settings",
+      "sync_server_port",
+      payload: {"k": "sync_server_port", "v": port.toString()},
+    );
+    _db.enqueueOperation(
+      "UPSERT",
+      "settings",
+      "sync_server_scheme",
+      payload: {"k": "sync_server_scheme", "v": useHttps ? "https" : "http"},
+    );
+    _persistAndNotify();
+  }
+
   Map<String, dynamic> _payload() => {
     "medicines": medicines.map((e) => e.toJson()).toList(),
     "purchases": purchases.map((e) => e.toJson()).toList(),
@@ -726,6 +802,7 @@ class AppState extends ChangeNotifier {
     "users": users.map((e) => e.toJson()).toList(),
     "companyName": companyName,
     "printerName": printerName,
+    "settings": _settings,
   };
 
   Future<void> _persist() => _db.saveSnapshot(_payload());
@@ -734,6 +811,7 @@ class AppState extends ChangeNotifier {
     await _persist();
     await runAlerts();
     notifyListeners();
+    unawaited(_syncLocalQueue());
   }
 
   void _seed() {
@@ -770,8 +848,8 @@ class AppState extends ChangeNotifier {
     try {
       final ops = await _db.getPendingOperations();
       if (ops.isNotEmpty) {
-        final success = await network.pushOperations(ops);
-        if (success) {
+        final pushed = await network.pushOperations(ops);
+        if (pushed != null) {
           final seqIds = ops.map((e) => e["seq_id"] as int).toList();
           await _db.removeOperations(seqIds);
         }
